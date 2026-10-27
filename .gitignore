@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dist-electron/
+.vite/
+*.log
+.DS_Store
+Thumbs.db
+coverage/
+
+# 本地试用的 vault
+.local-vault/
+shots/
+spike-result.json
