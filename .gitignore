@@ -11,3 +11,4 @@ coverage/
 .local-vault/
 shots/
 spike-result.json
+release/
