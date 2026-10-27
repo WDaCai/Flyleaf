@@ -32,10 +32,10 @@ function buildTheme(dark: boolean) {
         backgroundColor: 'transparent',
         color: 'var(--editor-fg)',
         height: '100%',
-        fontSize: '14px',
+        fontSize: 'var(--font-size-body)',
       },
-      '.cm-scroller': { fontFamily: 'var(--mono)', lineHeight: '1.65', overflow: 'auto' },
-      '.cm-content': { padding: '20px 0', caretColor: 'var(--editor-caret)' },
+      '.cm-scroller': { fontFamily: 'var(--mono)', lineHeight: 'var(--leading-body)', overflow: 'auto' },
+      '.cm-content': { padding: '24px 0', caretColor: 'var(--editor-caret)' },
       '.cm-gutters': {
         backgroundColor: 'transparent',
         color: 'var(--editor-gutter)',

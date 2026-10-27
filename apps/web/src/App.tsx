@@ -10,6 +10,7 @@ import type {
   NoteType,
   VaultInfo,
   FlyleafClient,
+  TrashItem,
 } from '@flyleaf/core/contracts';
 import { Editor } from './components/Editor';
 import { ExperimentChart } from './components/ExperimentChart';
@@ -22,7 +23,37 @@ import { toPng } from 'html-to-image';
 
 
 type UiTheme = 'dark' | 'light';
+type EditorWidth = 'narrow' | 'mid' | 'wide';
 const THEME_KEY = 'flyleaf-theme';
+const WIDTH_KEY = 'flyleaf-editor-width';
+const FOCUS_KEY = 'flyleaf-focus';
+
+function readStoredWidth(): EditorWidth {
+  try {
+    const v = localStorage.getItem(WIDTH_KEY);
+    if (v === 'narrow' || v === 'mid' || v === 'wide') return v;
+  } catch {
+    /* ignore */
+  }
+  return 'mid';
+}
+
+function applyEditorWidth(w: EditorWidth): void {
+  document.documentElement.setAttribute('data-editor-width', w);
+  try {
+    localStorage.setItem(WIDTH_KEY, w);
+  } catch {
+    /* ignore */
+  }
+}
+
+function readStoredFocus(): boolean {
+  try {
+    return localStorage.getItem(FOCUS_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 
 function readStoredTheme(): UiTheme {
   try {
@@ -148,10 +179,45 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
     applyTheme(initial);
     return initial;
   });
+  const [focusMode, setFocusMode] = useState<boolean>(() => readStoredFocus());
+  const [editorWidth, setEditorWidth] = useState<EditorWidth>(() => {
+    const w = readStoredWidth();
+    applyEditorWidth(w);
+    return w;
+  });
+  const [trashOpen, setTrashOpen] = useState(false);
+  const [trashItems, setTrashItems] = useState<TrashItem[]>([]);
+  const [toast, setToast] = useState<string | null>(null);
+  const [lastTrashed, setLastTrashed] = useState<string | null>(null);
+  const toastTimer = useRef<number | null>(null);
+  const statusTimer = useRef<number | null>(null);
 
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  useEffect(() => {
+    applyEditorWidth(editorWidth);
+  }, [editorWidth]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(FOCUS_KEY, focusMode ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  }, [focusMode]);
+
+  const flashStatus = useCallback((msg: string, autoClearMs = 3200): void => {
+    setStatus(msg);
+    setToast(msg);
+    if (toastTimer.current) window.clearTimeout(toastTimer.current);
+    if (statusTimer.current) window.clearTimeout(statusTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), autoClearMs);
+    statusTimer.current = window.setTimeout(() => {
+      setStatus((cur) => (cur === msg ? '就绪' : cur));
+    }, autoClearMs + 400);
+  }, []);
 
   const toggleTheme = useCallback((): void => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
@@ -175,6 +241,14 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
       setFolders(await client.vault.listFolders());
     } catch {
       setFolders(null);
+    }
+  }, [client]);
+
+  const refreshTrash = useCallback(async () => {
+    try {
+      setTrashItems(await client.notes.listTrash(30));
+    } catch {
+      setTrashItems([]);
     }
   }, [client]);
 
@@ -385,13 +459,13 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
       try {
         const next = await client.vault.setInbox(path);
         setFolders(next);
-        setStatus(`随记收件箱 → ${path}`);
+        flashStatus(`已设收件箱 → ${path}`);
       } catch (e) {
         const err = e as { message?: string };
         setStatus(`设置收件箱失败：${err.message ?? '未知错误'}`);
       }
     },
-    [client],
+    [client, flashStatus],
   );
 
   const clearOpenNote = useCallback(
@@ -415,10 +489,11 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
     async (path: string, mode: 'trash' | 'hard' = 'trash'): Promise<void> => {
       const label = withoutExt(path);
       if (mode === 'hard') {
-        const ok = window.confirm(`永久删除「${label}」？\n此操作不可恢复。`);
+        const ok = window.confirm(`永久删除「${label}」？
+此操作不可恢复，不会进入回收站。`);
         if (!ok) return;
       } else {
-        const ok = window.confirm(`将「${label}」移入回收站（.yan/trash）？\n可从库内手动恢复。`);
+        const ok = window.confirm(`将「${label}」移入回收站？`);
         if (!ok) return;
       }
       try {
@@ -426,18 +501,86 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
         const result = await client.notes.delete({ path, mode });
         clearOpenNote(path);
         await refreshTree();
-        setStatus(
-          result.mode === 'trash'
-            ? `已移入回收站：${result.trashedTo ?? path}`
-            : `已永久删除 ${path}`,
-        );
+        if (result.mode === 'trash') {
+          setLastTrashed(result.trashedTo ?? null);
+          flashStatus('已移入回收站');
+          if (trashOpen) void refreshTrash();
+        } else {
+          flashStatus(`已永久删除 ${path}`);
+        }
       } catch (e) {
         const err = e as { message?: string };
         setStatus(`删除失败：${err.message ?? '未知错误'}`);
       }
     },
-    [client, clearOpenNote, doSave, refreshTree],
+    [client, clearOpenNote, doSave, flashStatus, refreshTree, refreshTrash, trashOpen],
   );
+
+  const restoreNote = useCallback(
+    async (trashedPath: string): Promise<void> => {
+      try {
+        const result = await client.notes.restore({
+          path: trashedPath,
+          inbox: folders?.inbox ?? '00-inbox',
+        });
+        await refreshTree();
+        await refreshTrash();
+        await openPath(result.to);
+        flashStatus(result.usedInboxFallback ? `已还原到收件箱：${result.to}` : `已还原：${result.to}`);
+        if (lastTrashed === trashedPath) setLastTrashed(null);
+      } catch (e) {
+        const err = e as { message?: string };
+        setStatus(`还原失败：${err.message ?? '未知错误'}`);
+      }
+    },
+    [client, folders?.inbox, flashStatus, lastTrashed, openPath, refreshTrash, refreshTree],
+  );
+
+  const restoreLatest = useCallback(async (): Promise<void> => {
+    let path = lastTrashed;
+    if (!path) {
+      const list = await client.notes.listTrash(1);
+      path = list[0]?.path ?? null;
+    }
+    if (!path) {
+      flashStatus('回收站为空');
+      return;
+    }
+    await restoreNote(path);
+  }, [client, flashStatus, lastTrashed, restoreNote]);
+
+  const clearTrash = useCallback(async (): Promise<void> => {
+    const ok = window.confirm(
+      '清空回收站？\n将永久删除回收站内全部笔记，此操作不可恢复。',
+    );
+    if (!ok) return;
+    try {
+      const result = await client.notes.clearTrash();
+      setLastTrashed(null);
+      await refreshTrash();
+      flashStatus(result.removed ? `已清空回收站（${result.removed}）` : '回收站已为空');
+    } catch (e) {
+      const err = e as { message?: string };
+      setStatus(`清空失败：${err.message ?? '未知错误'}`);
+    }
+  }, [client, flashStatus, refreshTrash]);
+
+    const setEditorWidthPref = useCallback(
+    (w: EditorWidth): void => {
+      setEditorWidth(w);
+      flashStatus(w === 'narrow' ? '读宽：窄' : w === 'wide' ? '读宽：宽' : '读宽：中');
+    },
+    [flashStatus],
+  );
+
+  const toggleFocus = useCallback((): void => {
+    setFocusMode((v) => {
+      const next = !v;
+      flashStatus(next ? '已进入 Focus' : '已退出 Focus');
+      return next;
+    });
+  }, [flashStatus]);
+
 
   const moveNote = useCallback(
     async (from: string, folder: string): Promise<void> => {
@@ -572,6 +715,10 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
     }
   }, [captureFlash, folders?.inbox, openPath]);
 
+  useEffect(() => {
+    if (trashOpen) void refreshTrash();
+  }, [trashOpen, refreshTrash]);
+
   // 初始化
   useEffect(() => {
     void (async () => {
@@ -641,11 +788,14 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
       } else if (e.key.toLowerCase() === 'm') {
         e.preventDefault();
         setFwMode((m) => (m === 'outline' ? 'mindmap' : 'outline'));
+      } else if (e.key === '\\' || e.code === 'Backslash') {
+        e.preventDefault();
+        toggleFocus();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [present, active, deleteNote]);
+  }, [present, active, deleteNote, toggleFocus]);
 
   const openVault = async (): Promise<void> => {
     if (!vaultInput.trim()) return;
@@ -683,6 +833,62 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
         hint: '帮助',
         run: () => void openMarkdownGuide(),
       },
+      {
+        id: 'focus-toggle',
+        label: focusMode ? '退出 Focus 模式' : '进入 Focus 模式',
+        hint: 'Ctrl+\\',
+        run: () => toggleFocus(),
+      },
+      {
+        id: 'width-narrow',
+        label: '读宽：窄',
+        hint: '约 680px',
+        run: () => setEditorWidthPref('narrow'),
+      },
+      {
+        id: 'width-mid',
+        label: '读宽：中',
+        hint: '约 820px',
+        run: () => setEditorWidthPref('mid'),
+      },
+      {
+        id: 'width-wide',
+        label: '读宽：宽',
+        hint: '约 960px',
+        run: () => setEditorWidthPref('wide'),
+      },
+      {
+        id: 'trash-restore-latest',
+        label: '还原最近删除',
+        hint: '回收站',
+        run: () => void restoreLatest(),
+      },
+      {
+        id: 'trash-open',
+        label: trashOpen ? '关闭回收站面板' : '打开回收站',
+        hint: '回收站',
+        run: () => setTrashOpen((v) => !v),
+      },
+      {
+        id: 'trash-clear',
+        label: '清空回收站',
+        hint: '危险',
+        run: () => void clearTrash(),
+      },
+      ...(active
+        ? [
+            {
+              id: 'set-inbox-active-folder',
+              label: '将当前笔记所在目录设为收件箱',
+              hint: '文件夹',
+              run: () => {
+                const dir = active.includes('/') ? active.slice(0, active.lastIndexOf('/')) : '';
+                if (dir) void setInboxFolder(dir);
+                else flashStatus('当前笔记在库根，无法设收件箱');
+              },
+            } satisfies PaletteItem,
+          ]
+        : []),
       ...NEW_TYPES.map((t) => ({
         id: `new-${t.type}`,
         label: `新建${t.label}`,
@@ -700,7 +906,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
     };
     walk(tree);
     return [...actions, ...files];
-  }, [createNote, folders, openMarkdownGuide, openPath, tree]);
+  }, [active, clearTrash, createNote, flashStatus, focusMode, folders, openMarkdownGuide, openPath, restoreLatest, setEditorWidthPref, setInboxFolder, toggleFocus, trashOpen, tree]);
 
   const searchFn = useCallback(
     async (q: string): Promise<PaletteItem[]> => {
@@ -758,7 +964,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
   const showPitfallInsert = isPitfall && !bodyRef.current.includes('## 症状') && !body.includes('## 症状');
 
   return (
-    <div className={`app ${present ? 'present' : ''}`}>
+    <div className={`app ${present ? 'present' : ''} ${focusMode ? 'focus-mode' : ''}`}>
       <aside className="sidebar">
         <div className="sidebar-head">
           <span className="brand">Flyleaf</span>
@@ -787,6 +993,13 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
           <button className="btn ghost" onClick={() => setFolderDialog({ mode: 'create' })} title="新建或管理文件夹">
             <span>文件夹</span>
           </button>
+          <button
+            className={`btn ghost ${trashOpen ? 'on' : ''}`}
+            onClick={() => setTrashOpen((v) => !v)}
+            title="回收站"
+          >
+            <span>回收站</span>
+          </button>
         </div>
 
         <div
@@ -799,7 +1012,9 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
           <TreeView
             nodes={tree}
             activePath={active}
+            inboxPath={folders?.inbox ?? null}
             onOpen={(p) => void openPath(p)}
+            onCreateIn={(dir) => void createNote('note', dir)}
             onDirMenu={(path, x, y) => {
               setFileMenu(null);
               setDirMenu({ path, x, y });
@@ -810,6 +1025,52 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
             }}
           />
         </div>
+
+
+        {trashOpen && (
+          <div className="trash-panel">
+            <div className="trash-panel-head">
+              <strong>回收站</strong>
+              <span className="trash-panel-count">{trashItems.length}</span>
+              <div className="trash-panel-spacer" />
+              <button
+                type="button"
+                className="btn ghost danger"
+                disabled={trashItems.length === 0}
+                onClick={() => void clearTrash()}
+                title="永久清空"
+              >
+                清空
+              </button>
+              <button type="button" className="icon-btn" onClick={() => setTrashOpen(false)} title="关闭">
+                ×
+              </button>
+            </div>
+            <div className="trash-panel-body">
+              {trashItems.length === 0 ? (
+                <div className="empty-plain trash-empty">
+                  <div className="empty-plain-title">回收站是空的</div>
+                  <div className="empty-plain-copy">删除的笔记会出现在这里，可随时还原。</div>
+                  <button type="button" className="btn primary" onClick={() => setTrashOpen(false)}>
+                    返回笔记
+                  </button>
+                </div>
+              ) : (
+                trashItems.map((item) => (
+                  <div key={item.path} className="trash-row">
+                    <div className="trash-row-main" title={item.originalPath}>
+                      <div className="trash-row-title">{item.title}</div>
+                      <div className="trash-row-path">{item.originalPath}</div>
+                    </div>
+                    <button type="button" className="btn ghost" onClick={() => void restoreNote(item.path)}>
+                      还原
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="sidebar-foot">
           <span>{vault?.noteCount ?? 0} 篇</span>
@@ -860,6 +1121,17 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
             </div>
           ))}
           <div className="tabbar-fill" />
+          {!doc && (
+            <div className="tabbar-actions">
+              <button
+                className={`btn ghost ${focusMode ? 'focus-exit' : ''}`}
+                onClick={toggleFocus}
+                title="Focus 模式 Ctrl+\u005c"
+              >
+                {focusMode ? '退出 Focus' : 'Focus'}
+              </button>
+            </div>
+          )}
           {doc && (
             <div className="tabbar-actions">
               <div className="seg">
@@ -900,6 +1172,13 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
               >
                 呈现 <kbd>Ctrl+Shift+P</kbd>
               </button>
+              <button
+                className={`btn ghost ${focusMode ? 'focus-exit' : ''}`}
+                onClick={toggleFocus}
+                title="Focus 模式 Ctrl+\u005c"
+              >
+                {focusMode ? '退出 Focus' : 'Focus'}
+              </button>
             </div>
           )}
         </div>
@@ -907,32 +1186,24 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
         <div className="content">
           <div key={active ?? 'empty'} className="content-pane">
           {!doc && (
-            <div className="empty">
-              <div className="empty-title">开始三步</div>
+            <div className="empty-plain">
               {firstNoteLeaf(tree) ? (
-                <button className="empty-step" onClick={openFirstNote}>
-                  <span className="empty-num">1</span>
-                  <span>打开第一篇笔记</span>
-                </button>
+                <>
+                  <div className="empty-plain-title">还没有打开笔记</div>
+                  <div className="empty-plain-copy">从左侧选一篇，或打开第一篇开始。</div>
+                  <button type="button" className="btn primary" onClick={openFirstNote}>
+                    打开第一篇笔记
+                  </button>
+                </>
               ) : (
-                <div className="empty-step empty-step-static" role="note">
-                  <span className="empty-num">1</span>
-                  <span>左侧还没有笔记，可点第 2 步新建</span>
-                </div>
+                <>
+                  <div className="empty-plain-title">还没有笔记</div>
+                  <div className="empty-plain-copy">新建一篇，或用随记热键 Ctrl+Alt+Space 快速记下。</div>
+                  <button type="button" className="btn primary" onClick={() => setPalette('command')}>
+                    新建笔记
+                  </button>
+                </>
               )}
-              <button className="empty-step" onClick={() => setPalette('command')}>
-                <span className="empty-num">2</span>
-                <span>
-                  点「新建」走命令面板（默认踩坑） <kbd>Ctrl+P</kbd>
-                </span>
-              </button>
-              <div className="empty-step empty-step-static" role="note" title="主窗暂无打开随记卡的 API，请用全局热键">
-                <span className="empty-num">3</span>
-                <span>
-                  桌面随记请按 <kbd>Ctrl+Alt+Space</kbd>（写完 Ctrl+Enter 归档）
-                </span>
-              </div>
-              <div className="empty-foot">关闭主窗口会收进托盘，不会退出；要退出请右键托盘图标。不会写 Markdown？命令面板搜「Markdown」。侧栏「文件夹」可增删自定义分类。</div>
             </div>
           )}
 
@@ -1032,6 +1303,22 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
             {isExperiment && <ExperimentChart body={body} />}
             <div className="present-body" dangerouslySetInnerHTML={{ __html: renderMarkdown(body) }} />
           </div>
+        </div>
+      )}
+
+
+      {toast && (
+        <div className={`status-toast ${lastTrashed && toast.includes('回收站') ? 'has-action' : ''}`}>
+          <span>{toast}</span>
+          {lastTrashed && toast.includes('回收站') && (
+            <button
+              type="button"
+              className="status-toast-action"
+              onClick={() => void restoreLatest()}
+            >
+              撤销
+            </button>
+          )}
         </div>
       )}
 
@@ -1164,13 +1451,17 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
 function TreeView({
   nodes,
   activePath,
+  inboxPath,
   onOpen,
+  onCreateIn,
   onDirMenu,
   onFileMenu,
 }: {
   nodes: FileNode[];
   activePath: string | null;
+  inboxPath?: string | null;
   onOpen: (path: string) => void;
+  onCreateIn?: (dir: string) => void;
   onDirMenu?: (path: string, x: number, y: number) => void;
   onFileMenu?: (path: string, x: number, y: number) => void;
 }): React.ReactElement {
@@ -1189,22 +1480,41 @@ function TreeView({
     list.map((n) => {
       if (n.kind === 'dir') {
         const expanded = open.has(n.path) || depth === 0;
+        const isInbox = inboxPath === n.path;
+        const kids = n.children ?? [];
+        const empty = kids.length === 0;
         return (
           <div key={n.path}>
             <div
-              className="tree-row dir"
-              style={{ paddingLeft: depth * 12 + 6 }}
+              className={`tree-row dir ${isInbox ? 'inbox' : ''}`}
+              style={{ paddingLeft: depth * 14 + 6 }}
               onClick={() => toggle(n.path)}
               onContextMenu={(e) => {
                 e.preventDefault();
                 onDirMenu?.(n.path, e.clientX, e.clientY);
               }}
-              title={`${n.path}（右键管理）`}
+              title={`${n.path}${isInbox ? ' · 收件箱' : ''}（右键管理）`}
             >
               <span className="tree-caret">{expanded ? '▾' : '▸'}</span>
               <span className="tree-name">{n.name}</span>
+              {isInbox && <span className="tree-inbox-badge">收件箱</span>}
             </div>
-            {expanded && n.children && render(n.children, depth + 1)}
+            {expanded && empty && (
+              <div className="tree-empty" style={{ paddingLeft: (depth + 1) * 14 + 20 }}>
+                <span className="tree-empty-copy">此文件夹是空的</span>
+                <button
+                  type="button"
+                  className="btn ghost tree-empty-cta"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCreateIn?.(n.path);
+                  }}
+                >
+                  在此新建
+                </button>
+              </div>
+            )}
+            {expanded && !empty && render(kids, depth + 1)}
           </div>
         );
       }
@@ -1212,7 +1522,7 @@ function TreeView({
         <div
           key={n.path}
           className={`tree-row file ${activePath === n.path ? 'on' : ''}`}
-          style={{ paddingLeft: depth * 12 + 20 }}
+          style={{ paddingLeft: depth * 14 + 20 }}
           onClick={() => onOpen(n.path)}
           onContextMenu={(e) => {
             e.preventDefault();
@@ -1224,6 +1534,14 @@ function TreeView({
         </div>
       );
     });
+
+  if (nodes.length === 0) {
+    return (
+      <div className="tree-empty tree-empty-root">
+        <span className="tree-empty-copy">还没有文件夹</span>
+      </div>
+    );
+  }
 
   return <>{render(nodes, 0)}</>;
 }

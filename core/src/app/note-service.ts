@@ -1,7 +1,8 @@
-import type { Backlink, CreateNoteInput, DeleteNoteInput, DeleteNoteResult, NoteDoc, NoteSummary } from '../contracts';
+﻿import type { Backlink, CreateNoteInput, DeleteNoteInput, DeleteNoteResult, NoteDoc, NoteSummary, RestoreNoteInput, RestoreNoteResult, TrashItem } from '../contracts';
 import { composeDocument } from '../domain/compose';
 import { asIsoString, asString, asStringArray, parseFrontmatter } from '../domain/frontmatter';
 import { basename, dirname, joinRel, normalizeRel, slugify, stripExt } from '../domain/paths';
+import { TRASH_ROOT, originalPathFromTrash } from '../domain/trash';
 import { splitDocument } from '../domain/text';
 import { parseWikiLinks, resolveTargetName } from '../domain/wikilink';
 import { BadRequestError, NotFoundError } from '../errors';
@@ -129,12 +130,12 @@ export class NoteService {
     const rel = normalizeRel(raw.path);
     if (!rel) throw new BadRequestError('缺少笔记路径');
     if (!rel.endsWith('.md')) throw new BadRequestError('只能删除 markdown 笔记');
-    if (rel.startsWith('.yan/') || rel === '.yan') {
+    const mode = raw.mode ?? 'trash';
+    if ((rel.startsWith('.yan/') || rel === '.yan') && !(mode === 'hard' && rel.startsWith(`${TRASH_ROOT}/`))) {
       throw new BadRequestError('不可删除系统目录下的文件');
     }
     if (!(await this.repo.exists(rel))) throw new NotFoundError(rel);
 
-    const mode = raw.mode ?? 'trash';
     if (mode === 'hard') {
       await this.repo.remove(rel);
       this.index.remove(rel);
@@ -144,18 +145,99 @@ export class NoteService {
     }
 
     // 默认进 .yan/trash，保留相对路径，便于恢复
-    let dest = joinRel('.yan/trash', rel);
+    let dest = joinRel(TRASH_ROOT, rel);
     if (await this.repo.exists(dest)) {
       const stamp = this.now().toISOString().replace(/[:.]/g, '-');
       const dir = dirname(rel);
       const name = `${stripExt(basename(rel))}__${stamp}.md`;
-      dest = joinRel('.yan/trash', dir, name);
+      dest = joinRel(TRASH_ROOT, dir, name);
     }
     await this.repo.rename(rel, dest);
     this.index.remove(rel);
     this.events.emit({ type: 'note:changed', path: rel });
     this.events.emit({ type: 'vault:changed', paths: [rel, dest] });
     return { path: rel, mode: 'trash', trashedTo: dest };
+  }
+
+  async clearTrash(): Promise<{ removed: number }> {
+    let files: Array<{ path: string; mtimeMs: number }> = [];
+    try {
+      files = await this.repo.listMarkdownUnder(TRASH_ROOT);
+    } catch {
+      return { removed: 0 };
+    }
+    for (const f of files) {
+      await this.repo.remove(f.path);
+      this.index.remove(f.path);
+    }
+    if (files.length) {
+      this.events.emit({ type: 'vault:changed', paths: files.map((f) => f.path) });
+    }
+    return { removed: files.length };
+  }
+
+  async listTrash(limit = 40): Promise<TrashItem[]> {
+    const lim = Math.max(1, Math.min(200, limit));
+    let files: Array<{ path: string; mtimeMs: number }> = [];
+    try {
+      files = await this.repo.listMarkdownUnder(TRASH_ROOT);
+    } catch {
+      return [];
+    }
+    const out: TrashItem[] = [];
+    for (const f of files.slice(0, lim)) {
+      const original = originalPathFromTrash(f.path) ?? basename(f.path);
+      out.push({
+        path: f.path,
+        originalPath: original,
+        title: stripExt(basename(original)),
+        mtimeMs: f.mtimeMs,
+      });
+    }
+    return out;
+  }
+
+  async restore(input: RestoreNoteInput | string): Promise<RestoreNoteResult> {
+    const raw = typeof input === 'string' ? { path: input } : input;
+    const from = normalizeRel(raw.path);
+    if (!from.startsWith(`${TRASH_ROOT}/`)) throw new BadRequestError('只能从回收站还原');
+    if (!from.endsWith('.md')) throw new BadRequestError('只能还原 markdown 笔记');
+    if (!(await this.repo.exists(from))) throw new NotFoundError(from);
+
+    const inbox = normalizeRel(raw.inbox ?? '00-inbox') || '00-inbox';
+    let target: string;
+    let usedInboxFallback: boolean;
+    const original = originalPathFromTrash(from);
+    if (original) {
+      const parent = dirname(original);
+      if (!parent || (await this.repo.dirExists(parent))) {
+        target = original;
+        usedInboxFallback = false;
+      } else {
+        target = joinRel(inbox, basename(original));
+        usedInboxFallback = true;
+      }
+    } else {
+      target = joinRel(inbox, basename(from));
+      usedInboxFallback = true;
+    }
+
+    if (await this.repo.exists(target)) {
+      const stamp = this.now().toISOString().replace(/[:.]/g, '-');
+      const dir = dirname(target);
+      const name = `${stripExt(basename(target))}__restored_${stamp}.md`;
+      target = dir ? joinRel(dir, name) : name;
+    }
+
+    await this.repo.rename(from, target);
+    try {
+      await this.read(target);
+    } catch {
+      // 索引稍后由监听补上
+    }
+    this.events.emit({ type: 'note:changed', path: target });
+    this.events.emit({ type: 'vault:changed', paths: [from, target] });
+    return { from, to: target, usedInboxFallback };
   }
 
   /** 反链：哪些笔记的 wikilink 指向当前文件 */

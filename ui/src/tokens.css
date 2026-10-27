@@ -44,8 +44,8 @@
   --used-border: rgba(176, 144, 196, 0.32);
   --vault-glow: #1c2028;
   --present-print-bg: #fff;
-  --shadow-card: 0 16px 40px rgba(0, 0, 0, 0.42);
-  --shadow-modal: 0 20px 52px rgba(0, 0, 0, 0.48);
+  --shadow-card: none;
+  --shadow-modal: 0 8px 28px rgba(0, 0, 0, 0.28);
   --modal-mask: rgba(0, 0, 0, 0.52);
 
   /* 呈现模式保持纸感（给别人看） */
@@ -117,8 +117,8 @@
   --used-border: rgba(143, 111, 160, 0.3);
   --vault-glow: #ebe6dc;
   --present-print-bg: #fff;
-  --shadow-card: 0 12px 32px rgba(40, 32, 20, 0.1);
-  --shadow-modal: 0 18px 44px rgba(40, 32, 20, 0.14);
+  --shadow-card: none;
+  --shadow-modal: 0 8px 24px rgba(40, 32, 20, 0.08);
   --modal-mask: rgba(40, 32, 20, 0.28);
 
   --present-bg: #f5f2eb;
@@ -156,7 +156,7 @@
   --dur-mid: 240ms;
   --dur-slow: 360ms;
 
-  --row: 26px;
+  --row: 30px;
   --radius: 8px;
   --radius-sm: 6px;
   --radius-xs: 4px;
@@ -170,9 +170,22 @@
   --font-size-xs: 11px;
   --font-size-sm: 12px;
   --font-size-md: 13px;
+  --font-size-body: 15px;
   --sidebar-w: 252px;
   --right-w: 268px;
   --editor-max: 820px;
+  --leading-body: 1.7;
+  --leading-ui: 1.45;
+}
+
+html[data-editor-width='narrow'] {
+  --editor-max: 680px;
+}
+html[data-editor-width='mid'] {
+  --editor-max: 820px;
+}
+html[data-editor-width='wide'] {
+  --editor-max: 960px;
 }
 
 * {
@@ -195,7 +208,7 @@ body {
   color: var(--text);
   font-family: var(--sans);
   font-size: var(--font-size);
-  line-height: 1.55;
+  line-height: var(--leading-ui);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
   transition:
@@ -439,7 +452,7 @@ kbd {
   background: var(--panel);
   color: var(--text);
   text-align: left;
-  box-shadow: var(--shadow-card);
+  box-shadow: none;
   transition:
     border-color var(--dur-fast) var(--ease-soft),
     color var(--dur-fast) var(--ease-soft),
@@ -450,8 +463,8 @@ kbd {
 .empty-step:hover {
   border-color: var(--accent-dim);
   color: var(--accent);
-  transform: translateY(-2px);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+  transform: none;
+  background: var(--panel-2);
 }
 .empty-step:active:not(.empty-step-static) {
   transform: translateY(0);

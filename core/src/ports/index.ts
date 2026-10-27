@@ -1,4 +1,4 @@
-import type { AppConfig } from '../contracts';
+﻿import type { AppConfig } from '../contracts';
 
 export interface RawNote {
   rel: string;
@@ -21,6 +21,8 @@ export interface NoteRepo {
   rename(from: string, to: string): Promise<void>;
   /** 所有 markdown 文件（posix 相对路径） */
   listMarkdown(): Promise<string[]>;
+  /** 列出某相对目录下全部 markdown（含 .yan/trash，不跳过该前缀） */
+  listMarkdownUnder(rel: string): Promise<Array<{ path: string; mtimeMs: number }>>;
   /** 所有目录（posix 相对路径），用于文件树 */
   listDirs(): Promise<string[]>;
   /** 仅顶层非隐藏目录名 */

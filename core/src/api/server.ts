@@ -1,8 +1,8 @@
-import Fastify, { type FastifyInstance } from 'fastify';
+﻿import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import type { CoreHost } from '../host';
 import { BadRequestError, toApiError } from '../errors';
-import type { CreateNoteInput, DeleteNoteInput, Mastery, SearchQuery, CreateFolderInput, DeleteFolderInput, RenameFolderInput } from '../contracts';
+import type { CreateNoteInput, DeleteNoteInput, Mastery, SearchQuery, CreateFolderInput, DeleteFolderInput, RenameFolderInput, RestoreNoteInput } from '../contracts';
 import { registerStatic } from './static';
 
 type Body = Record<string, unknown>;
@@ -102,6 +102,25 @@ export function createServer(host: CoreHost, opts: ServerOptions = {}): FastifyI
       mode: body.mode === 'hard' ? 'hard' : body.mode === 'trash' ? 'trash' : undefined,
     };
     return guard(() => host.client.notes.delete(input));
+  });
+
+  app.post('/api/v1/note/trash/clear', async () => {
+    return guard(() => host.client.notes.clearTrash());
+  });
+
+  app.get('/api/v1/note/trash', async (req) => {
+    const q = (req.query ?? {}) as Body;
+    const limit = typeof q.limit === 'string' ? Number(q.limit) : undefined;
+    return guard(() => host.client.notes.listTrash(limit));
+  });
+
+  app.post('/api/v1/note/restore', async (req) => {
+    const body = (req.body ?? {}) as Body;
+    const input: RestoreNoteInput = {
+      path: str(body.path, 'path'),
+      inbox: typeof body.inbox === 'string' ? body.inbox : undefined,
+    };
+    return guard(() => host.client.notes.restore(input));
   });
 
   app.get('/api/v1/backlinks', async (req) => {

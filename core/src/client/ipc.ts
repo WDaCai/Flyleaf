@@ -1,4 +1,4 @@
-import type { YanClient, YanEvent } from '../contracts';
+﻿import type { YanClient, YanEvent } from '../contracts';
 
 /** preload 通过 contextBridge 暴露的最小桥 */
 export interface IpcBridge {
@@ -34,6 +34,9 @@ export function createIpcClient(bridge: IpcBridge): YanClient {
         await call('notes.rename', from, to);
       },
       delete: (input) => call('notes.delete', typeof input === 'string' ? { path: input } : input),
+      listTrash: (limit) => call('notes.listTrash', limit),
+      clearTrash: () => call('notes.clearTrash'),
+      restore: (input) => call('notes.restore', typeof input === 'string' ? { path: input } : input),
       backlinks: (path) => call('notes.backlinks', path),
     },
     search: {

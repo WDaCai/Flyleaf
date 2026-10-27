@@ -1,4 +1,4 @@
-import type { YanClient, YanEvent } from '../contracts';
+﻿import type { YanClient, YanEvent } from '../contracts';
 
 export interface HttpClientOptions {
   baseUrl?: string;
@@ -69,6 +69,10 @@ export function createHttpClient(opts: HttpClientOptions = {}): YanClient {
       },
       delete: (input) =>
         request(base, 'POST', '/api/v1/note/delete', typeof input === 'string' ? { path: input } : input),
+      listTrash: (limit) => request(base, 'GET', `/api/v1/note/trash${qs({ limit })}`),
+      clearTrash: () => request(base, 'POST', '/api/v1/note/trash/clear', {}),
+      restore: (input) =>
+        request(base, 'POST', '/api/v1/note/restore', typeof input === 'string' ? { path: input } : input),
       backlinks: (path) => request(base, 'GET', `/api/v1/backlinks${qs({ path })}`),
     },
     search: {

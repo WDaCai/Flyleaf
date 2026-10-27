@@ -1,4 +1,4 @@
-import { promises as fs } from 'node:fs';
+﻿import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { ConflictError, NotFoundError } from '../errors';
 import { isInside, normalizeRel, splitRel, toPosix } from '../domain/paths';
@@ -158,6 +158,36 @@ export class FsNoteRepo implements NoteRepo {
 
   async listMarkdown(): Promise<string[]> {
     return this.walk((name) => name.endsWith('.md'));
+  }
+
+  async listMarkdownUnder(rel: string): Promise<Array<{ path: string; mtimeMs: number }>> {
+    const start = normalizeRel(rel);
+    const startAbs = start ? this.abs(start) : this.rootAbs;
+    const out: Array<{ path: string; mtimeMs: number }> = [];
+    const visit = async (dirAbs: string, relPosix: string): Promise<void> => {
+      let entries;
+      try {
+        entries = await fs.readdir(dirAbs, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const e of entries) {
+        const childRel = relPosix ? `${relPosix}/${e.name}` : e.name;
+        const childAbs = path.join(dirAbs, e.name);
+        if (e.isDirectory()) {
+          await visit(childAbs, childRel);
+        } else if (e.isFile() && e.name.endsWith('.md')) {
+          try {
+            const st = await fs.stat(childAbs);
+            out.push({ path: toPosix(childRel), mtimeMs: st.mtimeMs });
+          } catch {
+            /* skip */
+          }
+        }
+      }
+    };
+    await visit(startAbs, start);
+    return out.sort((a, b) => b.mtimeMs - a.mtimeMs);
   }
 
   async listDirs(): Promise<string[]> {

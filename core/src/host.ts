@@ -1,4 +1,4 @@
-import type { YanClient } from './contracts';
+﻿import type { YanClient } from './contracts';
 import { createCore, type Core } from './core';
 import { EventBus } from './app/event-bus';
 
@@ -58,6 +58,9 @@ export class CoreHost {
         create: (input) => c().notes.create(input),
         rename: (from, to) => c().notes.rename(from, to),
         delete: (input) => c().notes.delete(input),
+        listTrash: (limit) => c().notes.listTrash(limit),
+        clearTrash: () => c().notes.clearTrash(),
+        restore: (input) => c().notes.restore(input),
         backlinks: (p) => c().notes.backlinks(p),
       },
       search: {

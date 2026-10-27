@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 契约层：所有跨层共享的类型。
  * 约束：本文件不得 import 任何 IO / Node / React 模块，可被浏览器直接引用。
  */
@@ -110,6 +110,29 @@ export interface DeleteNoteResult {
   /** trash 模式下的回收站相对路径 */
   trashedTo?: string;
 }
+
+export interface TrashItem {
+  /** 回收站内相对路径，如 .yan/trash/00-inbox/a.md */
+  path: string;
+  /** 推断的原路径（可能经 stamp 剥离） */
+  originalPath: string;
+  title: string;
+  mtimeMs: number;
+}
+
+export interface RestoreNoteInput {
+  /** 回收站内相对路径 */
+  path: string;
+  /** 路径丢失时还原到此收件箱目录 */
+  inbox?: string;
+}
+
+export interface RestoreNoteResult {
+  from: string;
+  to: string;
+  usedInboxFallback: boolean;
+}
+
 
 export interface SearchQuery {
   text?: string;
@@ -257,6 +280,9 @@ export interface YanClient {
     create(input: CreateNoteInput): Promise<NoteDoc>;
     rename(from: string, to: string): Promise<void>;
     delete(input: DeleteNoteInput | string): Promise<DeleteNoteResult>;
+    listTrash(limit?: number): Promise<TrashItem[]>;
+    clearTrash(): Promise<{ removed: number }>;
+    restore(input: RestoreNoteInput | string): Promise<RestoreNoteResult>;
     backlinks(path: string): Promise<Backlink[]>;
   };
   search: {

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray, dialog, globalShortcut, ipcMain, nativeImage, screen } from 'electron';
+﻿import { app, BrowserWindow, Tray, dialog, globalShortcut, ipcMain, nativeImage, screen } from 'electron';
 import path from 'node:path';
 import { CoreHost } from '../../../core/src/host';
 
@@ -165,6 +165,14 @@ async function dispatch(method: string, args: unknown[]): Promise<unknown> {
       return c.notes.create(args[0] as Parameters<typeof c.notes.create>[0]);
     case 'notes.rename':
       return c.notes.rename(String(args[0]), String(args[1]));
+    case 'notes.delete':
+      return c.notes.delete(args[0] as Parameters<typeof c.notes.delete>[0]);
+    case 'notes.clearTrash':
+      return c.notes.clearTrash();
+    case 'notes.listTrash':
+      return c.notes.listTrash(args[0] as number | undefined);
+    case 'notes.restore':
+      return c.notes.restore(args[0] as Parameters<typeof c.notes.restore>[0]);
     case 'notes.backlinks':
       return c.notes.backlinks(String(args[0]));
     case 'search.query':
