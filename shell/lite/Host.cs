@@ -302,6 +302,11 @@ namespace Flyleaf.Lite
                 ReleaseCapture();
                 SendMessage(card.Handle, WmNclButtonDown, (IntPtr)HtBottomRight, IntPtr.Zero);
             }
+            else if (msg == "show-main")
+            {
+                ShowMain();
+                HideCard();
+            }
         }
 
         void BuildTray()

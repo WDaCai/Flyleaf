@@ -202,6 +202,19 @@ async function dispatch(method: string, args: unknown[]): Promise<unknown> {
         String(args[0]),
         args[1] as Parameters<typeof c.framework.saveCanvas>[1],
       );
+    case 'framework.listScratch':
+      return c.framework.listScratch();
+    case 'framework.createScratch':
+      return c.framework.createScratch((args[0] as { title?: string } | undefined) ?? {});
+    case 'framework.getScratch':
+      return c.framework.getScratch(String(args[0]));
+    case 'framework.saveScratch':
+      return c.framework.saveScratch(
+        String(args[0]),
+        args[1] as Parameters<typeof c.framework.saveScratch>[1],
+      );
+    case 'framework.deleteScratch':
+      return c.framework.deleteScratch(String(args[0]));
     case 'capture.getDraft':
       return c.capture.getDraft();
     case 'capture.saveDraft':
@@ -227,6 +240,12 @@ async function bootstrap(): Promise<void> {
   }
 
   host.client.events.subscribe((e) => {
+    if (e.type === 'scratch:open') {
+      if (!mainWin || mainWin.isDestroyed()) mainWin = createMainWindow();
+      mainWin.show();
+      mainWin.focus();
+      cardWin?.hide();
+    }
     for (const w of BrowserWindow.getAllWindows()) {
       if (!w.isDestroyed()) w.webContents.send(IPC_EVENT, e);
     }

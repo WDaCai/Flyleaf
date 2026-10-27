@@ -32,7 +32,7 @@ function hostBridge(): WebViewHost | null {
   return chrome?.webview ?? null;
 }
 
-function postHost(message: 'drag' | 'resize'): void {
+function postHost(message: 'drag' | 'resize' | 'show-main'): void {
   hostBridge()?.postMessage(message);
 }
 
@@ -84,6 +84,19 @@ function Card(): React.ReactElement {
     void client.capture.saveDraft(text).finally(() => window.close());
   };
 
+  const openScratch = async (): Promise<void> => {
+    try {
+      setStatus('正在打开梳理画布…');
+      await client.framework.createScratch();
+      postHost('show-main');
+      setStatus('已打开梳理画布');
+      // 主窗会收到 scratch:open；稍候藏随记卡
+      window.setTimeout(() => hide(), 200);
+    } catch (e) {
+      setStatus(`打开失败：${String(e)}`);
+    }
+  };
+
   return (
     <div className="card">
       <div
@@ -118,6 +131,9 @@ function Card(): React.ReactElement {
       />
       <div className="card-foot">
         <span className="card-status">{status}</span>
+        <button className="card-btn ghost" type="button" title="纯梳理，不同步笔记" onClick={() => void openScratch()}>
+          开梳理画布
+        </button>
         <button className="card-btn" onClick={() => void archive()}>
           归档
         </button>

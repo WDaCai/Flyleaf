@@ -188,7 +188,7 @@ HTTP：`GET /api/v1/framework`，`POST .../state|add|rename|remove|shift|expand`
 | --- | --- | --- |
 | 用途 | 框架笔记自由布局/连线 | 只梳理知识结构，不绑笔记文件 |
 | 主文件 | 框架 `foo.md`（大纲真相） | **无**框架 md；不写进 inbox 正文 |
-| 旁路/本体 | 同目录 `foo.canvas.json` | 独立 `*.flycanvas.json` 或 `.yan/scratch/<id>.flycanvas.json` |
+| 旁路/本体 | 同目录 `foo.canvas.json` | **钉死** `.yan/scratch/<id>.flycanvas.json` |
 | 节点 | 对应 md 树节点 id；可有 `note:` 前缀 | 仅标题文本；`notePath` 可空；**禁止**自动建/删/改笔记 |
 | 树边 | md 父子派生，只读 | 无 md 树；结构边也可只活在 json（下一刀定） |
 | 删除 | 大纲删节点仍可 trash 关联笔记 | 删 scratch **只动画布文件**，不走笔记 trash |
@@ -214,10 +214,17 @@ HTTP：`GET /api/v1/framework`，`POST .../state|add|rename|remove|shift|expand`
 ### 本刀 vs 下一刀
 
 1. **本刀**：`bound` 自由画布 + `foo.canvas.json` + schema 含 `mode`；组件可复用；**不**做 scratch 入口。
-2. **下一刀**：`scratch` 存盘、随记「开梳理画布」、框架侧区分入口；删 scratch 不碰笔记。
+2. **下一刀（本刀已落地）**：`scratch` 存盘、随记「开梳理画布」、侧栏列表；删 scratch 不碰笔记。
+
+### scratch 存盘约定（已钉）
+
+- 路径：`.yan/scratch/<id>.flycanvas.json`（与 capture 草稿 `card.json` 同目录、后缀区分）
+- `mode: "scratch"`；`frameworkPath` 空；`title` 显示名；节点带 `text`
+- API：`listScratch` / `createScratch` / `getScratch` / `saveScratch` / `deleteScratch`（delete 只 `repo.remove` 画布文件）
+- UI：同一 `FrameworkCanvas`（`mode="scratch"`）；随记卡「开梳理画布」；侧栏「梳理画布」列表
 
 ### 验收补充
 
 - bound：拖/连线/改形不新建笔记；单击不建文件。
-- scratch（下刀）：全程不碰笔记文件增删路径。
+- scratch：全程不碰笔记文件增删路径；删画布只去 `.flycanvas.json`。
 

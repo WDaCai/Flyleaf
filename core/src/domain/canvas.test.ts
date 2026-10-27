@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   canvasPathForFramework,
   emptyCanvasDoc,
+  emptyScratchDoc,
   ghostLayouts,
+  isScratchCanvasPath,
   parseCanvasJson,
   reconcileCanvas,
+  scratchPathForId,
   serializeCanvasDoc,
 } from './canvas';
 
@@ -67,5 +70,21 @@ describe('canvas', () => {
     expect(s).toContain('"version": 1');
     expect(s).toContain('"mode": "bound"');
     expect(parseCanvasJson(s, doc.frameworkPath).degraded).toBe(false);
+  });
+
+  it('scratch 路径与序列化', () => {
+    expect(scratchPathForId('s_abc')).toBe('.yan/scratch/s_abc.flycanvas.json');
+    expect(isScratchCanvasPath('.yan/scratch/s_abc.flycanvas.json')).toBe(true);
+    expect(isScratchCanvasPath('50-frameworks/foo.canvas.json')).toBe(false);
+    const doc = emptyScratchDoc('我的框架');
+    doc.nodes.push({ id: 'n1', x: 10, y: 20, w: 208, h: 34, shape: 'round', text: '概念' });
+    const s = serializeCanvasDoc(doc);
+    expect(s).toContain('"mode": "scratch"');
+    expect(s).toContain('"title": "我的框架"');
+    expect(s).toContain('"text": "概念"');
+    const r = parseCanvasJson(s, '');
+    expect(r.degraded).toBe(false);
+    expect(r.doc?.mode).toBe('scratch');
+    expect(r.doc?.nodes[0]?.text).toBe('概念');
   });
 });

@@ -1387,3 +1387,91 @@
 .mm-node.is-ghost .mm-label {
   fill: var(--text-dim, #888);
 }
+
+/* scratch 梳理画布 */
+.fc-scratch-title {
+  min-width: 120px;
+  max-width: 220px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--fg) 18%, transparent);
+  background: color-mix(in srgb, var(--bg, #12141a) 80%, transparent);
+  color: var(--fg);
+  font-size: 12px;
+}
+.mm-toolbar-hint {
+  font-size: 11px;
+  opacity: 0.55;
+  margin-right: 6px;
+  white-space: nowrap;
+}
+.scratch-panel {
+  border-top: 1px solid color-mix(in srgb, var(--fg) 10%, transparent);
+  padding: 8px 10px 10px;
+  max-height: 180px;
+  overflow: auto;
+}
+.scratch-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  opacity: 0.85;
+}
+.scratch-panel-head strong {
+  font-weight: 600;
+}
+.scratch-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+}
+.scratch-row-main {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: var(--fg);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+.scratch-row-main:hover,
+.scratch-row-main.on {
+  background: color-mix(in srgb, var(--fg) 10%, transparent);
+}
+.scratch-row-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.scratch-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.scratch-view-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--fg) 10%, transparent);
+}
+.scratch-view-bar .scratch-view-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+.scratch-view-bar .spacer {
+  flex: 1;
+}
+.scratch-view .mm-stage,
+.scratch-view .fc-stage {
+  flex: 1;
+  min-height: 0;
+}

@@ -11,11 +11,13 @@ import type {
   VaultInfo,
   FlyleafClient,
   TrashItem,
+  ScratchCanvasSummary,
 } from '@flyleaf/core/contracts';
 import { Editor } from './components/Editor';
 import { ExperimentChart } from './components/ExperimentChart';
 import { MetaPanel } from './components/MetaPanel';
 import { Framework } from './components/Framework';
+import { FrameworkCanvas } from './components/FrameworkCanvas';
 import { Palette, type PaletteItem } from './components/Palette';
 import { renderMarkdown, WIKI_PREFIX } from './markdown';
 import markdownGuideBody from './help/markdown-guide.md?raw';
@@ -202,6 +204,8 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
   const [palette, setPalette] = useState<'command' | 'search' | null>(null);
   const [present, setPresent] = useState(false);
   const [captureFlash, setCaptureFlash] = useState<{ file: string; line: number } | null>(null);
+  const [scratchList, setScratchList] = useState<ScratchCanvasSummary[]>([]);
+  const [scratchOpen, setScratchOpen] = useState<{ path: string; title: string } | null>(null);
   const [folders, setFolders] = useState<FoldersConfig | null>(null);
   const [folderDialog, setFolderDialog] = useState<
     null | { mode: 'create' } | { mode: 'rename'; path: string; title: string } | { mode: 'manage' }
@@ -901,6 +905,48 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
     }
   }, [doc]);
 
+
+  const refreshScratch = useCallback(async (): Promise<void> => {
+    try {
+      setScratchList(await client.framework.listScratch());
+    } catch {
+      setScratchList([]);
+    }
+  }, [client]);
+
+  const openScratchCanvas = useCallback(
+    (path: string, title: string): void => {
+      setScratchOpen({ path, title });
+      setStatus(`梳理画布：${title}`);
+    },
+    [],
+  );
+
+  const createScratchCanvas = useCallback(async (): Promise<void> => {
+    try {
+      const r = await client.framework.createScratch();
+      await refreshScratch();
+      openScratchCanvas(r.path, r.doc.title || '梳理画布');
+    } catch (e) {
+      setStatus(`新建梳理画布失败：${String(e)}`);
+    }
+  }, [client, openScratchCanvas, refreshScratch]);
+
+  const deleteScratchCanvas = useCallback(
+    async (path: string, title: string): Promise<void> => {
+      if (!window.confirm(`删除梳理画布「${title}」？\n只删画布文件，不碰笔记。`)) return;
+      try {
+        await client.framework.deleteScratch(path);
+        if (scratchOpen?.path === path) setScratchOpen(null);
+        await refreshScratch();
+        setStatus(`已删除梳理画布：${title}`);
+      } catch (e) {
+        setStatus(`删除失败：${String(e)}`);
+      }
+    },
+    [client, refreshScratch, scratchOpen?.path],
+  );
+
   const openTodayInbox = useCallback(async (): Promise<void> => {
     const path = captureFlash?.file ?? todayInboxPath(folders?.inbox ?? '00-inbox');
     try {
@@ -924,11 +970,12 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
         setVault(info);
         await refreshTree();
         await refreshFolders();
+        await refreshScratch();
       } catch {
         setNeedVault(true);
       }
     })();
-  }, [client, refreshFolders, refreshTree]);
+  }, [client, refreshFolders, refreshTree, refreshScratch]);
 
   // 事件订阅
   useEffect(
@@ -942,8 +989,18 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
           setStatus(`随记已归档 → ${file}`);
           void refreshTree();
         }
+        if (e.type === 'scratch:open') {
+          const path = 'path' in e && typeof e.path === 'string' ? e.path : '';
+          const title = 'title' in e && typeof e.title === 'string' ? e.title : '梳理画布';
+          if (path) {
+            setScratchOpen({ path, title });
+            setStatus(`梳理画布：${title}`);
+            void refreshScratch();
+          }
+        }
+        if (e.type === 'scratch:changed') void refreshScratch();
       }),
-    [client, folders?.inbox, refreshTree],
+    [client, folders?.inbox, refreshTree, refreshScratch],
   );
 
   // 快捷键
@@ -1229,6 +1286,41 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
           />
         </div>
 
+        <div className="scratch-panel">
+          <div className="scratch-panel-head">
+            <strong>梳理画布</strong>
+            <div className="trash-panel-spacer" />
+            <button type="button" className="btn ghost" title="新建纯梳理画布（不绑笔记）" onClick={() => void createScratchCanvas()}>
+              新建
+            </button>
+          </div>
+          {scratchList.length === 0 ? (
+            <div className="empty-plain-copy" style={{ fontSize: 12, opacity: 0.65, padding: '4px 6px' }}>
+              随记「开梳理画布」或点新建
+            </div>
+          ) : (
+            scratchList.map((s) => (
+              <div key={s.path} className="scratch-row">
+                <button
+                  type="button"
+                  className={`scratch-row-main${scratchOpen?.path === s.path ? ' on' : ''}`}
+                  onClick={() => openScratchCanvas(s.path, s.title)}
+                  title={s.path}
+                >
+                  <div className="scratch-row-title">{s.title}</div>
+                </button>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  title="只删画布文件"
+                  onClick={() => void deleteScratchCanvas(s.path, s.title)}
+                >
+                  ×
+                </button>
+              </div>
+            ))
+          )}
+        </div>
 
         {trashOpen && (
           <div className="trash-panel">
@@ -1324,7 +1416,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
             </div>
           ))}
           <div className="tabbar-fill" />
-          {!doc && (
+          {!scratchOpen && !doc && (
             <div className="tabbar-actions">
               <button
                 className={`btn ghost ${focusMode ? 'focus-exit' : ''}`}
@@ -1388,7 +1480,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
 
         <div className="content">
           <div key={active ?? 'empty'} className="content-pane">
-          {!doc && (
+          {!scratchOpen && !doc && (
             <div className="empty-plain">
               {firstNoteLeaf(tree) ? (
                 <>
@@ -1421,7 +1513,30 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
             </div>
           )}
 
-          {doc && isFramework && framework && (
+          {scratchOpen && (
+            <div className="scratch-view">
+              <div className="scratch-view-bar">
+                <span className="scratch-view-title">{scratchOpen.title}</span>
+                <span className="muted" style={{ fontSize: 11, opacity: 0.55 }}>
+                  纯梳理 · 不写笔记
+                </span>
+                <span className="spacer" />
+                <button type="button" className="btn ghost" onClick={() => setScratchOpen(null)}>
+                  关闭
+                </button>
+              </div>
+              <FrameworkCanvas
+                mode="scratch"
+                canvasPath={scratchOpen.path}
+                scratchTitle={scratchOpen.title}
+                onScratchTitleChange={(t) => setScratchOpen((prev) => (prev ? { ...prev, title: t } : prev))}
+                loadCanvas={(path) => client.framework.getScratch(path)}
+                saveCanvas={(path, doc) => client.framework.saveScratch(path, doc)}
+              />
+            </div>
+          )}
+
+          {!scratchOpen && doc && isFramework && framework && (
             <Framework
               framework={framework}
               mode={fwMode}
@@ -1442,7 +1557,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
             />
           )}
 
-          {doc && !isFramework && mode === 'edit' && (
+          {!scratchOpen && doc && !isFramework && mode === 'edit' && (
             <div className="doc-wrap">
               {isExperiment && <ExperimentChart body={bodyRef.current} />}
               <div className="doc-main">
@@ -1451,7 +1566,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
             </div>
           )}
 
-          {doc && !isFramework && mode === 'preview' && (
+          {!scratchOpen && doc && !isFramework && mode === 'preview' && (
             <div className="doc-wrap">
               {isExperiment && <ExperimentChart body={body} />}
               <div className="doc-main">

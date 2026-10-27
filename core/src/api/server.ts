@@ -203,6 +203,36 @@ export function createServer(host: CoreHost, opts: ServerOptions = {}): FastifyI
     );
   });
 
+
+  app.get('/api/v1/framework/scratch', async () => guard(() => host.client.framework.listScratch()));
+
+  app.post('/api/v1/framework/scratch', async (req) => {
+    const body = (req.body ?? {}) as Body;
+    const title = typeof body.title === 'string' ? body.title : undefined;
+    return guard(() => host.client.framework.createScratch({ title }));
+  });
+
+  app.get('/api/v1/framework/scratch/one', async (req) => {
+    const q = (req.query ?? {}) as Body;
+    return guard(() => host.client.framework.getScratch(str(q.path, 'path')));
+  });
+
+  app.put('/api/v1/framework/scratch/one', async (req) => {
+    const body = (req.body ?? {}) as Body;
+    return guard(() =>
+      host.client.framework.saveScratch(
+        str(body.path, 'path'),
+        body.doc as Parameters<typeof host.client.framework.saveScratch>[1],
+      ),
+    );
+  });
+
+  app.post('/api/v1/framework/scratch/delete', async (req) => {
+    const body = (req.body ?? {}) as Body;
+    await guard(() => host.client.framework.deleteScratch(str(body.path, 'path')));
+    return { ok: true };
+  });
+
   app.get('/api/v1/capture/draft', async () => guard(() => host.client.capture.getDraft()));
 
   app.put('/api/v1/capture/draft', async (req) => {

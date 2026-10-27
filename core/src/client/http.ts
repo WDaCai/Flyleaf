@@ -94,6 +94,11 @@ export function createHttpClient(opts: HttpClientOptions = {}): YanClient {
       shiftNode: (path, line, delta) => request(base, 'POST', '/api/v1/framework/shift', { path, line, delta }),
       getCanvas: (path) => request(base, 'GET', `/api/v1/framework/canvas${qs({ path })}`),
       saveCanvas: (path, doc) => request(base, 'PUT', '/api/v1/framework/canvas', { path, doc }),
+      listScratch: () => request(base, 'GET', '/api/v1/framework/scratch'),
+      createScratch: (opts) => request(base, 'POST', '/api/v1/framework/scratch', opts ?? {}),
+      getScratch: (path) => request(base, 'GET', `/api/v1/framework/scratch/one${qs({ path })}`),
+      saveScratch: (path, doc) => request(base, 'PUT', '/api/v1/framework/scratch/one', { path, doc }),
+      deleteScratch: (path) => request(base, 'POST', '/api/v1/framework/scratch/delete', { path }),
     },
     capture: {
       getDraft: () => request(base, 'GET', '/api/v1/capture/draft'),

@@ -23,6 +23,8 @@ export interface NoteRepo {
   listMarkdown(): Promise<string[]>;
   /** 列出某相对目录下全部 markdown（含 .yan/trash，不跳过该前缀） */
   listMarkdownUnder(rel: string): Promise<Array<{ path: string; mtimeMs: number }>>;
+  /** 列出某相对目录下匹配后缀的文件（含 .yan/*，不跳过隐藏前缀） */
+  listFilesUnder(rel: string, endsWith: string): Promise<Array<{ path: string; mtimeMs: number }>>;
   /** 所有目录（posix 相对路径），用于文件树 */
   listDirs(): Promise<string[]>;
   /** 仅顶层非隐藏目录名 */

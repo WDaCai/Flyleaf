@@ -25,10 +25,14 @@ export {
 } from './folders';
 export {
   canvasPathForFramework,
+  scratchPathForId,
+  isScratchCanvasPath,
   emptyCanvasDoc,
+  emptyScratchDoc,
   parseCanvasJson,
   serializeCanvasDoc,
   reconcileCanvas,
   ghostLayouts,
   CANVAS_DEFAULT_SIZE,
+  SCRATCH_DIR,
 } from './canvas';

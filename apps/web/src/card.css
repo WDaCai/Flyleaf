@@ -152,3 +152,18 @@ body {
     transform: none !important;
   }
 }
+
+.card-btn.ghost {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--fg, #e8eaed) 22%, transparent);
+  color: var(--fg, #e8eaed);
+  opacity: 0.9;
+}
+.card-btn.ghost:hover {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--fg, #e8eaed) 40%, transparent);
+}
+.card-foot {
+  gap: 8px;
+  flex-wrap: wrap;
+}

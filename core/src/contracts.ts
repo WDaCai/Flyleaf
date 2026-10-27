@@ -274,6 +274,8 @@ export interface FrameworkCanvasNode {
   w: number;
   h: number;
   shape: CanvasShape;
+  /** scratch 节点文案 */
+  text?: string;
 }
 
 export interface FrameworkCanvasEdge {
@@ -284,14 +286,23 @@ export interface FrameworkCanvasEdge {
   arrow?: boolean;
 }
 
-/** 旁路 foo.canvas.json */
+/** 旁路 foo.canvas.json 或 .yan/scratch/*.flycanvas.json */
 export interface FrameworkCanvasDoc {
   version: 1;
   mode: CanvasMode;
   frameworkPath: string;
+  /** scratch 显示名 */
+  title?: string;
   viewport: FrameworkCanvasViewport;
   nodes: FrameworkCanvasNode[];
   edges: FrameworkCanvasEdge[];
+}
+
+export interface ScratchCanvasSummary {
+  id: string;
+  path: string;
+  title: string;
+  mtimeMs: number;
 }
 
 export interface FrameworkCanvasLoadResult {
@@ -304,7 +315,9 @@ export type YanEvent =
   | { type: 'note:changed'; path: string }
   | { type: 'vault:changed'; paths: string[] }
   | { type: 'index:ready'; count: number }
-  | { type: 'capture:saved'; at: string; file: string; line: number };
+  | { type: 'capture:saved'; at: string; file: string; line: number }
+  | { type: 'scratch:open'; path: string; title: string }
+  | { type: 'scratch:changed' };
 
 export type Unsubscribe = () => void;
 
@@ -351,6 +364,11 @@ export interface YanClient {
     shiftNode(path: string, line: number, delta: -1 | 1): Promise<FrameworkTree>;
     getCanvas(path: string): Promise<FrameworkCanvasLoadResult>;
     saveCanvas(path: string, doc: FrameworkCanvasDoc): Promise<FrameworkCanvasDoc>;
+    listScratch(): Promise<ScratchCanvasSummary[]>;
+    createScratch(opts?: { title?: string }): Promise<{ path: string; doc: FrameworkCanvasDoc }>;
+    getScratch(path: string): Promise<FrameworkCanvasLoadResult>;
+    saveScratch(path: string, doc: FrameworkCanvasDoc): Promise<FrameworkCanvasDoc>;
+    deleteScratch(path: string): Promise<void>;
   };
   capture: {
     getDraft(): Promise<CaptureDraft>;

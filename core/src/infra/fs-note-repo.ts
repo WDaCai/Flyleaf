@@ -190,6 +190,38 @@ export class FsNoteRepo implements NoteRepo {
     return out.sort((a, b) => b.mtimeMs - a.mtimeMs);
   }
 
+
+  async listFilesUnder(rel: string, endsWith: string): Promise<Array<{ path: string; mtimeMs: number }>> {
+    const start = normalizeRel(rel);
+    const startAbs = start ? this.abs(start) : this.rootAbs;
+    const suffix = endsWith.toLowerCase();
+    const out: Array<{ path: string; mtimeMs: number }> = [];
+    const visit = async (dirAbs: string, relPosix: string): Promise<void> => {
+      let entries;
+      try {
+        entries = await fs.readdir(dirAbs, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const e of entries) {
+        const childRel = relPosix ? `${relPosix}/${e.name}` : e.name;
+        const childAbs = path.join(dirAbs, e.name);
+        if (e.isDirectory()) {
+          await visit(childAbs, childRel);
+        } else if (e.isFile() && e.name.toLowerCase().endsWith(suffix)) {
+          try {
+            const st = await fs.stat(childAbs);
+            out.push({ path: toPosix(childRel), mtimeMs: st.mtimeMs });
+          } catch {
+            /* skip */
+          }
+        }
+      }
+    };
+    await visit(startAbs, start);
+    return out.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  }
+
   async listDirs(): Promise<string[]> {
     const out: string[] = [];
     const walk = async (rel: string): Promise<void> => {

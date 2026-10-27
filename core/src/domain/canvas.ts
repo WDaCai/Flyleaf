@@ -17,6 +17,8 @@ export interface CanvasNodeLayout {
   w: number;
   h: number;
   shape: CanvasShape;
+  /** scratch 节点标题；bound 可省略（文案来自 md 树） */
+  text?: string;
 }
 
 export interface CanvasEdge {
@@ -29,9 +31,12 @@ export interface CanvasEdge {
 
 export interface FrameworkCanvasDoc {
   version: 1;
-  /** bound=旁路框架 md；scratch=独立纯梳理（下一刀） */
+  /** bound=旁路框架 md；scratch=独立纯梳理 */
   mode: CanvasMode;
+  /** bound：框架 md 路径；scratch：可空 */
   frameworkPath: string;
+  /** scratch 显示名；bound 可省略 */
+  title?: string;
   viewport: CanvasViewport;
   nodes: CanvasNodeLayout[];
   edges: CanvasEdge[];
@@ -66,6 +71,33 @@ export function canvasPathForFramework(frameworkRel: string): string {
   const p = frameworkRel.replace(/\\/g, '/');
   if (p.toLowerCase().endsWith('.md')) return `${p.slice(0, -3)}.canvas.json`;
   return `${p}.canvas.json`;
+}
+
+
+/** 纯梳理画布目录（PLAN 钉死） */
+export const SCRATCH_DIR = '.yan/scratch';
+
+/** id → .yan/scratch/<id>.flycanvas.json */
+export function scratchPathForId(id: string): string {
+  const safe = id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || 'scratch';
+  return `${SCRATCH_DIR}/${safe}.flycanvas.json`;
+}
+
+export function isScratchCanvasPath(rel: string): boolean {
+  const p = rel.replace(/\\/g, '/');
+  return p.startsWith(`${SCRATCH_DIR}/`) && p.endsWith('.flycanvas.json');
+}
+
+export function emptyScratchDoc(title: string, frameworkPath = ''): FrameworkCanvasDoc {
+  return {
+    version: 1,
+    mode: 'scratch',
+    frameworkPath: frameworkPath.replace(/\\/g, '/'),
+    title: title.trim() || '梳理画布',
+    viewport: { k: 1, tx: 48, ty: 48 },
+    nodes: [],
+    edges: [],
+  };
 }
 
 export function emptyCanvasDoc(frameworkPath: string): FrameworkCanvasDoc {
@@ -118,6 +150,7 @@ export function parseCanvasJson(raw: string, frameworkPath: string): CanvasLoadR
       const id = typeof n.id === 'string' ? n.id.trim() : '';
       if (!id || seenN.has(id)) continue;
       seenN.add(id);
+      const text = typeof n.text === 'string' ? n.text : undefined;
       nodes.push({
         id,
         x: num(n.x, 0),
@@ -125,6 +158,7 @@ export function parseCanvasJson(raw: string, frameworkPath: string): CanvasLoadR
         w: Math.max(40, num(n.w, DEFAULT_W)),
         h: Math.max(24, num(n.h, DEFAULT_H)),
         shape: asShape(n.shape),
+        ...(text !== undefined ? { text } : {}),
       });
     }
   }
@@ -154,12 +188,14 @@ export function parseCanvasJson(raw: string, frameworkPath: string): CanvasLoadR
       ? o.frameworkPath.replace(/\\/g, '/')
       : frameworkPath.replace(/\\/g, '/');
 
+  const title = typeof o.title === 'string' ? o.title : undefined;
   return {
     degraded: false,
     doc: {
       version: 1,
       mode: o.mode === 'scratch' ? 'scratch' : 'bound',
       frameworkPath: fp,
+      ...(title !== undefined ? { title } : {}),
       viewport,
       nodes,
       edges,
@@ -168,10 +204,14 @@ export function parseCanvasJson(raw: string, frameworkPath: string): CanvasLoadR
 }
 
 export function serializeCanvasDoc(doc: FrameworkCanvasDoc): string {
+  const mode = doc.mode === 'scratch' ? 'scratch' : 'bound';
   const clean: FrameworkCanvasDoc = {
     version: 1,
-    mode: doc.mode === 'scratch' ? 'scratch' : 'bound',
-    frameworkPath: doc.frameworkPath.replace(/\\/g, '/'),
+    mode,
+    frameworkPath: (doc.frameworkPath || '').replace(/\\/g, '/'),
+    ...(mode === 'scratch' || (typeof doc.title === 'string' && doc.title)
+      ? { title: (doc.title || '梳理画布').trim() || '梳理画布' }
+      : {}),
     viewport: {
       k: Math.min(2, Math.max(0.35, doc.viewport.k)),
       tx: doc.viewport.tx,
@@ -184,6 +224,7 @@ export function serializeCanvasDoc(doc: FrameworkCanvasDoc): string {
       w: Math.round(n.w),
       h: Math.round(n.h),
       shape: SHAPES.has(n.shape) ? n.shape : 'round',
+      ...(typeof n.text === 'string' ? { text: n.text } : {}),
     })),
     edges: doc.edges
       .filter((e) => e.kind === 'link' && e.from && e.to && e.from !== e.to)

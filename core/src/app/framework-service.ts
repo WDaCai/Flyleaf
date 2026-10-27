@@ -9,11 +9,16 @@ import { buildTree, flattenTree, findNodeByLine } from '../domain/tree';
 import {
   canvasPathForFramework,
   emptyCanvasDoc,
+  emptyScratchDoc,
+  isScratchCanvasPath,
   parseCanvasJson,
+  scratchPathForId,
   serializeCanvasDoc,
+  SCRATCH_DIR,
   type FrameworkCanvasDoc,
   type CanvasLoadResult,
 } from '../domain/canvas';
+import type { ScratchCanvasSummary } from '../contracts';
 import { resolveTargetName } from '../domain/wikilink';
 import { BadRequestError, NotFoundError } from '../errors';
 import type { IndexProvider, NoteRepo } from '../ports';
@@ -286,6 +291,90 @@ export class FrameworkService {
     return this.tree(rel);
   }
 
+
+
+  async listScratch(): Promise<ScratchCanvasSummary[]> {
+    await this.repo.mkdir(SCRATCH_DIR);
+    const files = await this.repo.listFilesUnder(SCRATCH_DIR, '.flycanvas.json');
+    const out: ScratchCanvasSummary[] = [];
+    for (const f of files) {
+      if (!isScratchCanvasPath(f.path)) continue;
+      const id = f.path.slice(SCRATCH_DIR.length + 1, -'.flycanvas.json'.length);
+      let title = id;
+      try {
+        const raw = await this.repo.read(f.path);
+        const parsed = parseCanvasJson(raw.raw, '');
+        if (parsed.doc?.title) title = parsed.doc.title;
+        else if (parsed.doc?.mode === 'scratch') title = title || '梳理画布';
+      } catch {
+        /* keep id */
+      }
+      out.push({ id, path: f.path, title, mtimeMs: f.mtimeMs });
+    }
+    return out;
+  }
+
+  async createScratch(opts?: { title?: string }): Promise<{ path: string; doc: FrameworkCanvasDoc }> {
+    await this.repo.mkdir(SCRATCH_DIR);
+    const now = this.now();
+    const pad = (n: number) => (n < 10 ? `0${n}` : String(n));
+    const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const id = `s_${stamp}_${Math.random().toString(36).slice(2, 6)}`;
+    const path = scratchPathForId(id);
+    const title =
+      (opts?.title && opts.title.trim()) ||
+      `梳理 ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const doc = emptyScratchDoc(title);
+    await this.repo.write(path, serializeCanvasDoc(doc));
+    this.events.emit({ type: 'scratch:changed' });
+    this.events.emit({ type: 'scratch:open', path, title: doc.title || title });
+    return { path, doc };
+  }
+
+  async getScratch(rel: string): Promise<CanvasLoadResult> {
+    const path = rel.replace(/\\/g, '/');
+    if (!isScratchCanvasPath(path)) throw new BadRequestError('不是 scratch 画布路径');
+    if (!(await this.repo.exists(path))) {
+      return { degraded: true, doc: null, reason: 'missing' };
+    }
+    try {
+      const raw = await this.repo.read(path);
+      const parsed = parseCanvasJson(raw.raw, '');
+      if (parsed.doc && parsed.doc.mode !== 'scratch') {
+        parsed.doc = { ...parsed.doc, mode: 'scratch' };
+      }
+      return parsed;
+    } catch {
+      return { degraded: true, doc: null, reason: 'read-error' };
+    }
+  }
+
+  async saveScratch(rel: string, doc: FrameworkCanvasDoc): Promise<FrameworkCanvasDoc> {
+    const path = rel.replace(/\\/g, '/');
+    if (!isScratchCanvasPath(path)) throw new BadRequestError('不是 scratch 画布路径');
+    if (!doc || doc.version !== 1) throw new BadRequestError('画布 version 必须为 1');
+    const normalized: FrameworkCanvasDoc = {
+      ...emptyScratchDoc(doc.title || '梳理画布'),
+      ...doc,
+      version: 1,
+      mode: 'scratch',
+      frameworkPath: '',
+      title: (doc.title || '梳理画布').trim() || '梳理画布',
+      nodes: Array.isArray(doc.nodes) ? doc.nodes : [],
+      edges: Array.isArray(doc.edges) ? doc.edges.filter((e) => e.kind === 'link') : [],
+    };
+    await this.repo.write(path, serializeCanvasDoc(normalized));
+    this.events.emit({ type: 'scratch:changed' });
+    return normalized;
+  }
+
+  /** 只删画布文件，不走笔记 trash，不碰 inbox md */
+  async deleteScratch(rel: string): Promise<void> {
+    const path = rel.replace(/\\/g, '/');
+    if (!isScratchCanvasPath(path)) throw new BadRequestError('不是 scratch 画布路径');
+    await this.repo.remove(path);
+    this.events.emit({ type: 'scratch:changed' });
+  }
 
   async getCanvas(rel: string): Promise<CanvasLoadResult> {
     const side = canvasPathForFramework(rel);

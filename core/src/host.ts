@@ -76,6 +76,11 @@ export class CoreHost {
         shiftNode: (p, line, delta) => c().framework.shiftNode(p, line, delta),
         getCanvas: (p) => c().framework.getCanvas(p),
         saveCanvas: (p, doc) => c().framework.saveCanvas(p, doc),
+        listScratch: () => c().framework.listScratch(),
+        createScratch: (opts) => c().framework.createScratch(opts),
+        getScratch: (p) => c().framework.getScratch(p),
+        saveScratch: (p, doc) => c().framework.saveScratch(p, doc),
+        deleteScratch: (p) => c().framework.deleteScratch(p),
       },
       capture: {
         getDraft: () => c().capture.getDraft(),

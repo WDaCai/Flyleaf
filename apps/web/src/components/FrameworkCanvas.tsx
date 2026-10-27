@@ -118,27 +118,60 @@ function emptyBoundDoc(path: string): FrameworkCanvasDoc {
   };
 }
 
+function emptyScratchLocal(title: string): FrameworkCanvasDoc {
+  return {
+    version: 1,
+    mode: 'scratch',
+    frameworkPath: '',
+    title: title.trim() || '梳理画布',
+    viewport: { k: 1, tx: PAD, ty: PAD },
+    nodes: [],
+    edges: [],
+  };
+}
+
+function newScratchNodeId(): string {
+  return `n_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+}
+
 export interface FrameworkCanvasProps {
-  framework: FrameworkTree;
-  collapsed: Set<string>;
-  onToggle: (id: string) => void;
-  onNavigate: (target: NavTarget | null) => void;
-  highlightLine: number | null;
-  onSelectLine: (line: number | null) => void;
+  /** 默认 bound；scratch=纯梳理，不绑 md */
+  mode?: 'bound' | 'scratch';
+  /** bound 必填；scratch 可省略 */
+  framework?: FrameworkTree;
+  /** scratch 存盘路径；bound 时用 framework.path */
+  canvasPath?: string;
+  /** scratch 标题 */
+  scratchTitle?: string;
+  onScratchTitleChange?: (title: string) => void;
+  collapsed?: Set<string>;
+  onToggle?: (id: string) => void;
+  onNavigate?: (target: NavTarget | null) => void;
+  highlightLine?: number | null;
+  onSelectLine?: (line: number | null) => void;
   loadCanvas: (path: string) => Promise<FrameworkCanvasLoadResult>;
   saveCanvas: (path: string, doc: FrameworkCanvasDoc) => Promise<FrameworkCanvasDoc>;
 }
 
 export function FrameworkCanvas({
+  mode = 'bound',
   framework,
-  collapsed,
+  canvasPath,
+  scratchTitle = '梳理画布',
+  onScratchTitleChange,
+  collapsed = new Set(),
   onToggle,
   onNavigate,
-  highlightLine,
+  highlightLine = null,
   onSelectLine,
   loadCanvas,
   saveCanvas,
 }: FrameworkCanvasProps): React.ReactElement {
+  const isScratch = mode === 'scratch';
+  const docPath = isScratch
+    ? (canvasPath || '').replace(/\\/g, '/')
+    : (framework?.path || '').replace(/\\/g, '/');
+  const [title, setTitle] = useState(scratchTitle);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [tool, setTool] = useState<Tool>('select');
   const [view, setView] = useState({ k: 1, tx: PAD, ty: PAD });
@@ -173,22 +206,68 @@ export function FrameworkCanvas({
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const viewRef = useRef(view);
   viewRef.current = view;
+  const titleRef = useRef(title);
+  titleRef.current = title;
 
-  const live = useMemo(() => flattenLive(framework.root, collapsed), [framework, collapsed]);
+  useEffect(() => {
+    setTitle(scratchTitle);
+  }, [scratchTitle, docPath]);
+
+  const live = useMemo(() => {
+    if (isScratch || !framework) return [] as FlatNode[];
+    return flattenLive(framework.root, collapsed);
+  }, [isScratch, framework, collapsed]);
   const liveById = useMemo(() => new Map(live.map((n) => [n.id, n])), [live]);
 
   const treeLinks = useMemo(() => {
+    if (isScratch) return [] as { id: string; from: string; to: string }[];
     const out: { id: string; from: string; to: string }[] = [];
     for (const n of live) {
       if (n.parentId) out.push({ id: `tree:${n.parentId}->${n.id}`, from: n.parentId, to: n.id });
     }
     return out;
-  }, [live]);
+  }, [live, isScratch]);
 
   const applyStored = useCallback(
     (stored: FrameworkCanvasDoc | null): void => {
+      if (isScratch) {
+        const next: LayoutNode[] = [];
+        for (const n of stored?.nodes ?? []) {
+          next.push({
+            id: n.id,
+            x: n.x,
+            y: n.y,
+            w: n.w,
+            h: n.h,
+            shape: (n.shape as CanvasShape) || 'round',
+            text: typeof n.text === 'string' && n.text ? n.text : '新节点',
+            state: 'todo',
+            target: null,
+            linkedNotes: 0,
+            line: 0,
+            childCount: 0,
+          });
+        }
+        const idSet = new Set(next.map((n) => n.id));
+        const nextEdges: LinkEdge[] = [];
+        for (const e of stored?.edges ?? []) {
+          if (!idSet.has(e.from) || !idSet.has(e.to)) continue;
+          nextEdges.push({ id: e.id, from: e.from, to: e.to, arrow: e.arrow });
+        }
+        setNodes(next);
+        setEdges(nextEdges);
+        if (stored?.title) setTitle(stored.title);
+        if (stored?.viewport) {
+          setView({
+            k: Math.min(2, Math.max(0.35, stored.viewport.k || 1)),
+            tx: stored.viewport.tx ?? PAD,
+            ty: stored.viewport.ty ?? PAD,
+          });
+        }
+        return;
+      }
+      if (!framework) return;
       const defaults = treeDefaults(framework.root, collapsed);
-      const liveIds = live.map((n) => ({ id: n.id }));
       const byId = new Map<string, LayoutNode>();
       if (stored) {
         for (const n of stored.nodes) {
@@ -228,8 +307,7 @@ export function FrameworkCanvas({
           childCount: n.childCount,
         });
       }
-      // orphans as ghosts (layout only; not in md)
-      for (const [id, ghost] of byId) {
+      for (const [, ghost] of byId) {
         next.push({ ...ghost, text: '(已失效)', state: 'todo', ghost: true, childCount: 0 });
       }
       const liveSet = new Set(live.map((n) => n.id));
@@ -248,7 +326,7 @@ export function FrameworkCanvas({
         });
       }
     },
-    [framework, collapsed, live],
+    [isScratch, framework, collapsed, live],
   );
 
   // load sidecar
@@ -261,7 +339,12 @@ export function FrameworkCanvas({
     setDirty(false);
     (async () => {
       try {
-        const res = await loadCanvas(framework.path);
+        if (!docPath) {
+          applyStored(null);
+          if (!cancelled) setReady(true);
+          return;
+        }
+        const res = await loadCanvas(docPath);
         if (cancelled) return;
         applyStored(res.doc);
       } catch {
@@ -274,11 +357,11 @@ export function FrameworkCanvas({
     return () => {
       cancelled = true;
     };
-  }, [framework.path, loadCanvas, applyStored]);
+  }, [docPath, loadCanvas, applyStored]);
 
   // when tree changes (collapse/rename) after ready, re-merge without wiping positions
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || isScratch || !framework) return;
     setNodes((prev) => {
       const prevMap = new Map(prev.map((n) => [n.id, n]));
       const defaults = treeDefaults(framework.root, collapsed);
@@ -306,10 +389,33 @@ export function FrameworkCanvas({
       }
       return next;
     });
-  }, [live, ready, framework, collapsed, liveById]);
+  }, [live, ready, framework, collapsed, liveById, isScratch]);
 
   const buildDoc = useCallback((): FrameworkCanvasDoc => {
-    const base = emptyBoundDoc(framework.path);
+    if (isScratch) {
+      const base = emptyScratchLocal(titleRef.current);
+      return {
+        ...base,
+        viewport: { ...viewRef.current },
+        nodes: nodes.map((n) => ({
+          id: n.id,
+          x: Math.round(n.x * 10) / 10,
+          y: Math.round(n.y * 10) / 10,
+          w: Math.round(n.w),
+          h: Math.round(n.h),
+          shape: n.shape,
+          text: n.text,
+        })),
+        edges: edges.map((e) => ({
+          id: e.id,
+          kind: 'link' as const,
+          from: e.from,
+          to: e.to,
+          ...(e.arrow ? { arrow: true } : {}),
+        })),
+      };
+    }
+    const base = emptyBoundDoc(docPath);
     return {
       ...base,
       viewport: { ...viewRef.current },
@@ -331,20 +437,21 @@ export function FrameworkCanvas({
         ...(e.arrow ? { arrow: true } : {}),
       })),
     };
-  }, [framework.path, nodes, edges]);
+  }, [isScratch, docPath, nodes, edges]);
 
   const scheduleSave = useCallback((): void => {
+    if (!docPath) return;
     setDirty(true);
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       const doc = buildDoc();
-      void saveCanvas(framework.path, doc)
+      void saveCanvas(docPath, doc)
         .then(() => setDirty(false))
         .catch(() => {
           /* keep dirty */
         });
     }, 280);
-  }, [buildDoc, saveCanvas, framework.path]);
+  }, [buildDoc, saveCanvas, docPath]);
 
   useEffect(() => () => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -417,7 +524,16 @@ export function FrameworkCanvas({
   const selectNode = (n: LayoutNode): void => {
     setSelectedId(n.id);
     setSelectedEdgeId(null);
-    if (n.line > 0) onSelectLine(n.line);
+    if (!isScratch && n.line > 0) onSelectLine?.(n.line);
+  };
+
+  const editScratchText = (n: LayoutNode): void => {
+    if (!isScratch) return;
+    const next = window.prompt('节点文案', n.text);
+    if (next == null) return;
+    const text = next.trim() || '新节点';
+    setNodes((prev) => prev.map((x) => (x.id === n.id ? { ...x, text } : x)));
+    scheduleSave();
   };
 
   const applyShapeTool = (n: LayoutNode): void => {
@@ -448,7 +564,14 @@ export function FrameworkCanvas({
     }
 
     if (tool === 'delete') {
-      // 本刀：删除只清自由边/幽灵；不删 md 节点
+      if (isScratch) {
+        setNodes((prev) => prev.filter((x) => x.id !== n.id));
+        setEdges((prev) => prev.filter((e) => e.from !== n.id && e.to !== n.id));
+        setSelectedId(null);
+        scheduleSave();
+        return;
+      }
+      // bound：删除只清自由边/幽灵；不删 md 节点
       if (n.ghost) {
         setNodes((prev) => prev.filter((x) => x.id !== n.id));
         scheduleSave();
@@ -473,6 +596,28 @@ export function FrameworkCanvas({
     if (tool === 'link') {
       setLinkFrom(null);
       setDraftLine(null);
+    }
+    if (isScratch && (tool === 'round' || tool === 'rect' || tool === 'ellipse')) {
+      const w = clientToWorld(e.clientX, e.clientY);
+      const id = newScratchNodeId();
+      const node: LayoutNode = {
+        id,
+        x: w.x - NODE_W / 2,
+        y: w.y - NODE_H / 2,
+        w: NODE_W,
+        h: NODE_H,
+        shape: tool,
+        text: '新节点',
+        state: 'todo',
+        target: null,
+        linkedNotes: 0,
+        line: 0,
+        childCount: 0,
+      };
+      setNodes((prev) => [...prev, node]);
+      setSelectedId(id);
+      scheduleSave();
+      return;
     }
     panRef.current = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty };
     setPanning(true);
@@ -690,7 +835,7 @@ export function FrameworkCanvas({
           )}
 
           {nodes.map((n) => {
-            const selected = selectedId === n.id || (n.line > 0 && highlightLine === n.line);
+            const selected = selectedId === n.id || (n.line > 0 && (highlightLine != null && highlightLine === n.line));
             const label = n.text.length > LABEL_MAX ? `${n.text.slice(0, LABEL_MAX)}…` : n.text;
             const { rx, ry } = shapeRx(n.shape, n.w, n.h);
             return (
@@ -702,15 +847,20 @@ export function FrameworkCanvas({
                 onPointerDown={(e) => onNodePointerDown(e, n)}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
-                  if (!n.ghost && n.childCount > 0) onToggle(n.id);
+                  if (isScratch) {
+                    editScratchText(n);
+                    return;
+                  }
+                  if (!n.ghost && n.childCount > 0) onToggle?.(n.id);
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  // 单击只选中/导航，绝不新建文件
-                  if (!n.ghost) onNavigate(n.target);
+                  // 单击只选中/导航，绝不新建文件；scratch 不导航
+                  if (isScratch) return;
+                  if (!n.ghost) onNavigate?.(n.target);
                 }}
               >
-                <title>{n.ghost ? '幽灵节点（md 已无）' : `${n.text}\n第 ${n.line} 行 · ${n.linkedNotes} 条关联`}</title>
+                <title>{isScratch ? `${n.text}（双击改文案）` : n.ghost ? '幽灵节点（md 已无）' : `${n.text}\n第 ${n.line} 行 · ${n.linkedNotes} 条关联`}</title>
                 <rect className="mm-node-body" width={n.w} height={n.h} rx={rx} ry={ry} />
                 {!n.ghost && <rect className="mm-state-bar" x={0} y={0} width={4} height={n.h} rx={2} />}
                 <text x={14} y={n.h / 2 + 4} className="mm-label">
@@ -743,7 +893,21 @@ export function FrameworkCanvas({
           })}
         </g>
       </svg>
-      <div className="mm-toolbar fc-toolbar" role="toolbar" aria-label="自由画布">
+      <div className="mm-toolbar fc-toolbar" role="toolbar" aria-label={isScratch ? '梳理画布' : '自由画布'}>
+        {isScratch && (
+          <input
+            className="fc-scratch-title"
+            value={title}
+            title="梳理画布标题"
+            onChange={(e) => {
+              const v = e.target.value;
+              setTitle(v);
+              onScratchTitleChange?.(v);
+            }}
+            onBlur={() => scheduleSave()}
+          />
+        )}
+        {isScratch && <span className="mm-toolbar-hint">形状工具点空白处新建 · 双击改文案</span>}
         {tools.map((t) => (
           <button
             key={t.id}
