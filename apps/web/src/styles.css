@@ -649,12 +649,13 @@
 }
 
 
-/* ---------- 导图 ---------- */
+/* ---------- 导图（draw.io 画板外观） ---------- */
 .mm-wrap {
   position: relative;
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  background: var(--bg);
 }
 .mm-svg {
   width: 100%;
@@ -662,55 +663,93 @@
   display: block;
   cursor: grab;
   touch-action: none;
-  background-image: radial-gradient(var(--mm-dot) 1px, transparent 1px);
-  background-size: 22px 22px;
+  background: var(--bg);
 }
+.mm-svg.is-panning,
 .mm-svg:active {
   cursor: grabbing;
 }
+.mm-grid-line {
+  stroke: var(--mm-grid);
+}
 .mm-toolbar {
   position: absolute;
-  right: 12px;
-  top: 10px;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 2px 6px;
+  gap: 4px;
+  padding: 4px 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--panel-glass);
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-modal);
   z-index: 2;
+}
+.mm-zoom {
+  min-width: 42px;
+  text-align: center;
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  user-select: none;
+}
+.mm-toolbar-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: var(--border);
+}
+.mm-fit-btn {
+  min-width: 36px;
+  font-size: var(--font-size-xs);
 }
 .mm-hint {
   color: var(--text-faint);
   font-size: var(--font-size-xs);
   padding: 0 6px;
+  white-space: nowrap;
 }
 .mm-link {
   stroke: var(--mm-link);
-  stroke-width: 1;
+  stroke-width: 1.25;
   fill: none;
+  stroke-linejoin: miter;
+  stroke-linecap: square;
 }
 .mm-node {
   cursor: pointer;
 }
-.mm-node rect {
+.mm-node .mm-node-body {
   fill: var(--panel-2);
   stroke: var(--border);
-  stroke-width: 1;
+  stroke-width: 1.25;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.06));
   transition: fill var(--dur-fast) var(--ease-soft), stroke var(--dur-fast) var(--ease-soft);
 }
-.mm-node:hover rect {
+.mm-node:hover .mm-node-body {
   fill: var(--mm-node-hover);
 }
-.mm-node.is-selected rect {
+.mm-node.is-selected .mm-node-body {
   fill: var(--mm-node-selected);
-  stroke: var(--border);
+  stroke: var(--accent);
+  stroke-width: 1.75;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.14));
 }
 .mm-node.is-selected .mm-label {
   font-weight: 600;
 }
+.mm-node .mm-state-bar {
+  fill: var(--state-todo);
+  stroke: none;
+  pointer-events: none;
+}
+.mm-node.state-todo .mm-state-bar { fill: var(--state-todo); }
+.mm-node.state-learning .mm-state-bar { fill: var(--state-learning); }
+.mm-node.state-known .mm-state-bar { fill: var(--state-known); }
+.mm-node.state-used .mm-state-bar { fill: var(--state-used); }
 .mm-node text {
   font-size: var(--font-size-xs);
   font-family: var(--sans);
@@ -724,19 +763,10 @@
   fill: var(--text-faint);
   font-size: 10px;
 }
-.mm-node .mm-state-dot {
-  fill: var(--state-todo);
-  opacity: 0.85;
-}
-.mm-node.state-todo .mm-state-dot { fill: var(--state-todo); }
-.mm-node.state-learning .mm-state-dot { fill: var(--state-learning); }
-.mm-node.state-known .mm-state-dot { fill: var(--state-known); }
-.mm-node.state-used .mm-state-dot { fill: var(--state-used); }
 .mm-node .mm-linked {
   fill: var(--mm-linked);
   opacity: 0.9;
 }
-
 /* ---------- 命令面板 ---------- */
 .palette-input {
   width: 100%;

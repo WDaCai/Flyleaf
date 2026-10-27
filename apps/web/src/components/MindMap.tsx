@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { hierarchy, tree as d3tree } from 'd3-hierarchy';
 import type { FrameworkTree, NavTarget, TreeNode } from '@flyleaf/core/contracts';
 
-const NODE_W = 196;
-const NODE_H = 26;
-const GAP_Y = 14;
-const GAP_X = 212;
-const PAD = 40;
+const NODE_W = 208;
+const NODE_H = 34;
+const GAP_Y = 18;
+const GAP_X = 228;
+const PAD = 48;
+const LABEL_MAX = 16;
+const GRID = 20;
 
 interface Lite {
   id: string;
@@ -30,6 +32,18 @@ interface Placement {
   x: number;
   y: number;
   collapsed: boolean;
+}
+
+/** draw.io 风格正交折线：父右中 → 水平/垂直肘 → 子左中 */
+function orthogonalPath(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+): string {
+  const midX = Math.round((from.x + to.x) / 2);
+  if (Math.abs(from.y - to.y) < 0.5) {
+    return `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
+  }
+  return `M ${from.x} ${from.y} L ${midX} ${from.y} L ${midX} ${to.y} L ${to.x} ${to.y}`;
 }
 
 function toLite(n: TreeNode, collapsed: Set<string>): Lite {
@@ -66,6 +80,7 @@ export function MindMap({
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragRef = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
   const [view, setView] = useState({ k: 1, tx: PAD, ty: PAD });
+  const [panning, setPanning] = useState(false);
 
   const layout = useMemo(() => {
     const root = hierarchy<Lite>(toLite(framework.root, collapsed));
@@ -149,6 +164,7 @@ export function MindMap({
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>): void => {
     if ((e.target as HTMLElement).closest('[data-node]')) return;
     dragRef.current = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty };
+    setPanning(true);
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
@@ -160,6 +176,7 @@ export function MindMap({
 
   const onPointerUp = (e: React.PointerEvent<SVGSVGElement>): void => {
     dragRef.current = null;
+    setPanning(false);
     try {
       e.currentTarget.releasePointerCapture(e.pointerId);
     } catch {
@@ -180,44 +197,63 @@ export function MindMap({
     });
   };
 
+  const zoomPct = Math.round(view.k * 100);
+
+  // 网格覆盖内容包围盒外扩，随平移/缩放一起走（像 draw.io 画板）
+  const gridPad = GRID * 40;
+  const gridX = (Number.isFinite(layout.minX) ? layout.minX : 0) - gridPad;
+  const gridY = (Number.isFinite(layout.minY) ? layout.minY : 0) - gridPad;
+  const gridW = Math.max(GRID * 80, (layout.maxX - layout.minX || 0) + gridPad * 2);
+  const gridH = Math.max(GRID * 80, (layout.maxY - layout.minY || 0) + gridPad * 2);
+
   return (
     <div className="mm-wrap">
-      <div className="mm-toolbar">
-        <button type="button" className="icon-btn" title="放大" onClick={() => zoomBy(1.2)}>
-          +
-        </button>
-        <button type="button" className="icon-btn" title="缩小" onClick={() => zoomBy(0.83)}>
-          -
-        </button>
-        <button type="button" className="icon-btn" title="适应窗口" onClick={fitView}>
-          适应
-        </button>
-        <span className="mm-hint">单击选中/跳转 · 双击折叠 · 滚轮缩放 · 拖拽平移</span>
-      </div>
       <svg
         ref={svgRef}
-        className="mm-svg"
+        className={`mm-svg${panning ? ' is-panning' : ''}`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
+        <defs>
+          <pattern
+            id="mm-grid-pat"
+            width={GRID}
+            height={GRID}
+            patternUnits="userSpaceOnUse"
+          >
+            <path
+              className="mm-grid-line"
+              d={`M ${GRID} 0 L 0 0 0 ${GRID}`}
+              fill="none"
+              strokeWidth={1}
+            />
+          </pattern>
+        </defs>
         <g transform={`translate(${view.tx},${view.ty}) scale(${view.k})`}>
-          {layout.links.map((l) => {
-            const mid = (l.from.x + l.to.x) / 2;
-            return (
-              <path
-                key={l.id}
-                className="mm-link"
-                d={`M ${l.from.x} ${l.from.y} C ${mid} ${l.from.y}, ${mid} ${l.to.y}, ${l.to.x} ${l.to.y}`}
-                fill="none"
-              />
-            );
-          })}
+          <rect
+            className="mm-grid-fill"
+            x={gridX}
+            y={gridY}
+            width={gridW}
+            height={gridH}
+            fill="url(#mm-grid-pat)"
+            pointerEvents="none"
+          />
+
+          {layout.links.map((l) => (
+            <path
+              key={l.id}
+              className="mm-link"
+              d={orthogonalPath(l.from, l.to)}
+              fill="none"
+            />
+          ))}
 
           {layout.nodes.map((n) => {
             const selected = n.line > 0 && highlightLine === n.line;
-            const label = n.text.length > 14 ? `${n.text.slice(0, 14)}…` : n.text;
+            const label = n.text.length > LABEL_MAX ? `${n.text.slice(0, LABEL_MAX)}…` : n.text;
             return (
               <g
                 key={n.id}
@@ -236,9 +272,9 @@ export function MindMap({
                 }}
               >
                 <title>{`${n.text}\n第 ${n.line} 行 · ${n.linkedNotes} 条关联`}</title>
-                <rect width={NODE_W} height={NODE_H} rx={6} />
-                <circle className="mm-state-dot" cx={11} cy={NODE_H / 2} r={3.2} />
-                <text x={20} y={NODE_H / 2 + 4} className="mm-label">
+                <rect className="mm-node-body" width={NODE_W} height={NODE_H} rx={8} ry={8} />
+                <rect className="mm-state-bar" x={0} y={0} width={4} height={NODE_H} rx={2} />
+                <text x={14} y={NODE_H / 2 + 4} className="mm-label">
                   {label}
                 </text>
                 {n.childCount > 0 && (
@@ -247,13 +283,27 @@ export function MindMap({
                   </text>
                 )}
                 {n.linkedNotes > 0 && (
-                  <circle cx={NODE_W - 8} cy={8} r={3} className="mm-linked" />
+                  <circle cx={NODE_W - 10} cy={9} r={3} className="mm-linked" />
                 )}
               </g>
             );
           })}
         </g>
       </svg>
+      <div className="mm-toolbar" role="toolbar" aria-label="导图画板">
+        <button type="button" className="icon-btn" title="缩小" onClick={() => zoomBy(0.83)}>
+          −
+        </button>
+        <span className="mm-zoom" title="当前缩放">{zoomPct}%</span>
+        <button type="button" className="icon-btn" title="放大" onClick={() => zoomBy(1.2)}>
+          +
+        </button>
+        <span className="mm-toolbar-sep" aria-hidden="true" />
+        <button type="button" className="icon-btn mm-fit-btn" title="适应窗口" onClick={fitView}>
+          适应
+        </button>
+        <span className="mm-hint">单击跳转 · 双击折叠</span>
+      </div>
     </div>
   );
 }
