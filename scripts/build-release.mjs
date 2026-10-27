@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const srcDist = path.join(root, 'node_modules', 'electron', 'dist');
-const outDir = path.join(root, 'release', 'Yan');
+const outDir = path.join(root, 'release', 'FlyleafElectron');
 const appDir = path.join(outDir, 'resources', 'app');
 
 const KEEP_LOCALES = new Set(['zh-CN.pak', 'en-US.pak']);
@@ -37,14 +37,14 @@ async function main() {
   // 主程序改名，双击即可启动
   const exe = path.join(outDir, 'electron.exe');
   if (await fs.stat(exe).then(() => true).catch(() => false)) {
-    await fs.rename(exe, path.join(outDir, 'Yan.exe'));
+    await fs.rename(exe, path.join(outDir, 'Flyleaf.exe'));
   }
 
   await fs.mkdir(appDir, { recursive: true });
 
   const pkg = {
-    name: 'yan-desktop',
-    productName: 'Yan',
+    name: 'flyleaf-desktop',
+    productName: 'Flyleaf',
     version: '0.2.0',
     main: 'main.cjs',
   };
@@ -72,7 +72,7 @@ async function main() {
 
   console.log(`打包完成：${outDir}`);
   console.log(`体积：${(total / 1024 / 1024).toFixed(1)} MB · ${files} 个文件`);
-  console.log(`启动：${path.join(outDir, 'Yan.exe')}`);
+  console.log(`启动：${path.join(outDir, 'Flyleaf.exe')}`);
 }
 
 await main();

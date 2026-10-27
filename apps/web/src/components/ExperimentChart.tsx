@@ -46,6 +46,11 @@ export interface ExperimentChartProps {
 
 const COLORS = ['#5a6270', '#7aa2f7', '#9ece6a', '#bb9af7', '#e0af68'];
 
+const TABLE_HINT = `| 版本 | 设备 | 帧时间(ms) | DrawCall | 显存(MB) |
+| --- | --- | --- | --- | --- |
+| before |  |  |  |  |
+| after |  |  |  |  |`;
+
 export function ExperimentChart({ body }: ExperimentChartProps): React.ReactElement | null {
   const table = useMemo(() => parseFirstTable(body), [body]);
 
@@ -71,7 +76,20 @@ export function ExperimentChart({ body }: ExperimentChartProps): React.ReactElem
     };
   }, [table]);
 
-  if (!model) return null;
+  if (!model) {
+    return (
+      <div className="exp exp-empty">
+        <div className="exp-head">
+          <span className="exp-title">对比图</span>
+          <span className="exp-sub">还没有可画的表</span>
+        </div>
+        <div className="exp-hint">
+          在正文里写一张 Markdown 表（第一列是组别，后面列填数字）。新建实验时默认带模板；也可直接粘贴：
+          <pre className="exp-hint-pre">{TABLE_HINT}</pre>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="exp">

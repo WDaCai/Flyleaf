@@ -27,7 +27,7 @@ export const MASTERY_LABEL: Record<Mastery, string> = {
   todo: '未学',
   learning: '在学',
   known: '已懂',
-  used: '项目中用过',
+  used: '用过',
 };
 
 export type NavTarget =
@@ -96,6 +96,21 @@ export interface CreateNoteInput {
   body?: string;
 }
 
+export type DeleteNoteMode = 'trash' | 'hard';
+
+export interface DeleteNoteInput {
+  path: string;
+  /** 默认 trash（移入 .yan/trash）；hard 为永久删除 */
+  mode?: DeleteNoteMode;
+}
+
+export interface DeleteNoteResult {
+  path: string;
+  mode: DeleteNoteMode;
+  /** trash 模式下的回收站相对路径 */
+  trashedTo?: string;
+}
+
 export interface SearchQuery {
   text?: string;
   type?: string;
@@ -156,6 +171,36 @@ export interface CardBounds {
   h: number;
 }
 
+
+export interface FolderEntry {
+  path: string;
+  title: string;
+}
+
+export interface FoldersConfig {
+  version: 1;
+  inbox: string;
+  folders: FolderEntry[];
+}
+
+export type DeleteFolderMode = 'refuse-if-not-empty' | 'delete-recursive';
+
+export interface CreateFolderInput {
+  path: string;
+  title?: string;
+}
+
+export interface RenameFolderInput {
+  from: string;
+  to: string;
+  title?: string;
+}
+
+export interface DeleteFolderInput {
+  path: string;
+  mode?: DeleteFolderMode;
+}
+
 export interface AppConfig {
   vaultPath: string | null;
   defaults: {
@@ -190,7 +235,7 @@ export type YanEvent =
   | { type: 'note:changed'; path: string }
   | { type: 'vault:changed'; paths: string[] }
   | { type: 'index:ready'; count: number }
-  | { type: 'capture:saved'; at: string };
+  | { type: 'capture:saved'; at: string; file: string; line: number };
 
 export type Unsubscribe = () => void;
 
@@ -200,12 +245,18 @@ export interface YanClient {
     info(): Promise<VaultInfo>;
     tree(): Promise<FileNode[]>;
     recent(limit?: number): Promise<NoteSummary[]>;
+    listFolders(): Promise<FoldersConfig>;
+    createFolder(input: CreateFolderInput): Promise<FoldersConfig>;
+    renameFolder(input: RenameFolderInput): Promise<FoldersConfig>;
+    deleteFolder(input: DeleteFolderInput): Promise<FoldersConfig>;
+    setInbox(path: string): Promise<FoldersConfig>;
   };
   notes: {
     read(path: string): Promise<NoteDoc>;
     write(path: string, body: string, frontmatter?: Record<string, unknown>, expectMtimeMs?: number): Promise<NoteDoc>;
     create(input: CreateNoteInput): Promise<NoteDoc>;
     rename(from: string, to: string): Promise<void>;
+    delete(input: DeleteNoteInput | string): Promise<DeleteNoteResult>;
     backlinks(path: string): Promise<Backlink[]>;
   };
   search: {
@@ -228,6 +279,10 @@ export interface YanClient {
     subscribe(fn: (e: YanEvent) => void): Unsubscribe;
   };
 }
+
+/** 对外优先用此名；YanClient 为历史别名，逐步替换。 */
+export type FlyleafClient = YanClient;
+export type FlyleafEvent = YanEvent;
 
 export interface ApiError {
   code: string;

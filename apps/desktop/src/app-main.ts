@@ -2,8 +2,8 @@ import { app, BrowserWindow, Tray, dialog, globalShortcut, ipcMain, nativeImage,
 import path from 'node:path';
 import { CoreHost } from '../../../core/src/host';
 
-const IPC_INVOKE = 'yan:invoke';
-const IPC_EVENT = 'yan:event';
+const IPC_INVOKE = 'flyleaf:invoke';
+const IPC_EVENT = 'flyleaf:event';
 
 const RENDERER = path.join(__dirname, 'renderer');
 const PRELOAD = path.join(__dirname, 'preload.cjs');
@@ -21,7 +21,7 @@ let tray: Tray | null = null;
 let host: CoreHost | null = null;
 
 function defaultVault(): string {
-  return process.env.YAN_VAULT ?? path.join(app.getPath('documents'), 'yan-vault');
+  return process.env.FLYLEAF_VAULT ?? process.env.YAN_VAULT ?? path.join(app.getPath('documents'), 'flyleaf-vault');
 }
 
 function clampToScreen(b: Bounds): Bounds {
@@ -142,6 +142,16 @@ async function dispatch(method: string, args: unknown[]): Promise<unknown> {
       return c.vault.tree();
     case 'vault.recent':
       return c.vault.recent(args[0] as number | undefined);
+    case 'vault.listFolders':
+      return c.vault.listFolders();
+    case 'vault.createFolder':
+      return c.vault.createFolder(args[0] as Parameters<typeof c.vault.createFolder>[0]);
+    case 'vault.renameFolder':
+      return c.vault.renameFolder(args[0] as Parameters<typeof c.vault.renameFolder>[0]);
+    case 'vault.deleteFolder':
+      return c.vault.deleteFolder(args[0] as Parameters<typeof c.vault.deleteFolder>[0]);
+    case 'vault.setInbox':
+      return c.vault.setInbox(String(args[0]));
     case 'notes.read':
       return c.notes.read(String(args[0]));
     case 'notes.write':
@@ -217,7 +227,7 @@ async function bootstrap(): Promise<void> {
       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAOElEQVR42u3NMQEAAAgDoC251a3gLwSgcyfTVFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVfVvHzhRBAFkf1sAAAAASUVORK5CYII=',
     );
     tray = new Tray(icon);
-    tray.setToolTip('砚 Yan');
+    tray.setToolTip('Flyleaf');
     tray.on('click', toggleCard);
     tray.on('double-click', () => {
       if (!mainWin) mainWin = createMainWindow();

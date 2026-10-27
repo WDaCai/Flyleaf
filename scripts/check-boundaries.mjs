@@ -24,7 +24,7 @@ const RULES = [
 ];
 
 const APP_FORBID = [
-  { pattern: /from\s+['"]@yan\/core\/(domain|app|infra|api|ports)/, why: '壳层只能通过 client / contracts 访问核心' },
+  { pattern: /from\s+['"]@flyleaf\/core\/(domain|app|infra|api|ports)/, why: '壳层只能通过 client / contracts 访问核心' },
   { pattern: /from\s+['"].*core\/src\/(domain|app|infra|api|ports)/, why: '壳层只能通过 client / contracts 访问核心' },
 ];
 

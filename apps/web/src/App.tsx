@@ -2,21 +2,49 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   Backlink,
   FileNode,
+  FoldersConfig,
   FrameworkTree,
   Mastery,
   NavTarget,
   NoteDoc,
   NoteType,
   VaultInfo,
-  YanClient,
-} from '@yan/core/contracts';
+  FlyleafClient,
+} from '@flyleaf/core/contracts';
 import { Editor } from './components/Editor';
 import { ExperimentChart } from './components/ExperimentChart';
 import { MetaPanel } from './components/MetaPanel';
 import { Framework } from './components/Framework';
 import { Palette, type PaletteItem } from './components/Palette';
 import { renderMarkdown, WIKI_PREFIX } from './markdown';
+import markdownGuideBody from './help/markdown-guide.md?raw';
 import { toPng } from 'html-to-image';
+
+
+type UiTheme = 'dark' | 'light';
+const THEME_KEY = 'flyleaf-theme';
+
+function readStoredTheme(): UiTheme {
+  try {
+    const v = localStorage.getItem(THEME_KEY);
+    if (v === 'light' || v === 'dark') return v;
+  } catch {
+    /* ignore */
+  }
+  if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: light)').matches) {
+    return 'light';
+  }
+  return 'dark';
+}
+
+function applyTheme(theme: UiTheme): void {
+  document.documentElement.setAttribute('data-theme', theme);
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch {
+    /* ignore */
+  }
+}
 
 interface Tab {
   path: string;
@@ -28,13 +56,37 @@ const NEW_TYPES: Array<{ type: NoteType; label: string }> = [
   { type: 'experiment', label: '实验' },
   { type: 'knowledge', label: '知识' },
   { type: 'weekly', label: '周报' },
-  { type: 'framework', label: '知识框架' },
+  { type: 'framework', label: '框架' },
   { type: 'note', label: '随手记' },
 ];
+
+const MARKDOWN_GUIDE_PATH = '30-knowledge/Markdown写法说明.md';
+const MARKDOWN_GUIDE_TITLE = 'Markdown写法说明';
+
+const PITFALL_TEMPLATE = ['## 症状', '', '## 环境', '', '## 原因', '', '## 解法', '', '## 验证', ''].join('\n');
 
 function nowTime(): string {
   const d = new Date();
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function todayInboxPath(inbox = '00-inbox'): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${inbox}/${y}-${m}-${day}.md`;
+}
+
+/** 过滤 Windows 非法路径字符，保留中文 */
+function sanitizeFolderPathInput(raw: string): string {
+  return raw
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/[<>:"|?*\u0000-\u001f]/g, '')
+    .replace(/^[/]+|[/]+$/g, '')
+    .replace(/[/]+/g, '/')
+    .slice(0, 80);
 }
 
 function baseName(p: string): string {
@@ -48,12 +100,23 @@ function withoutExt(p: string): string {
   return i <= 0 ? b : b.slice(0, i);
 }
 
+function firstNoteLeaf(nodes: FileNode[]): FileNode | null {
+  for (const n of nodes) {
+    if (n.kind === 'file') return n;
+    if (n.children) {
+      const hit = firstNoteLeaf(n.children);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
 function titleOf(doc: NoteDoc): string {
   const t = doc.frontmatter.title;
   return typeof t === 'string' && t.trim() ? t.trim() : withoutExt(doc.path);
 }
 
-export function App({ client }: { client: YanClient }): React.ReactElement {
+export function App({ client }: { client: FlyleafClient }): React.ReactElement {
   const [vault, setVault] = useState<VaultInfo | null>(null);
   const [needVault, setNeedVault] = useState(false);
   const [vaultInput, setVaultInput] = useState('');
@@ -73,6 +136,26 @@ export function App({ client }: { client: YanClient }): React.ReactElement {
   const [status, setStatus] = useState('就绪');
   const [palette, setPalette] = useState<'command' | 'search' | null>(null);
   const [present, setPresent] = useState(false);
+  const [captureFlash, setCaptureFlash] = useState<{ file: string; line: number } | null>(null);
+  const [folders, setFolders] = useState<FoldersConfig | null>(null);
+  const [folderDialog, setFolderDialog] = useState<
+    null | { mode: 'create' } | { mode: 'rename'; path: string; title: string } | { mode: 'manage' }
+  >(null);
+  const [dirMenu, setDirMenu] = useState<{ path: string; x: number; y: number } | null>(null);
+  const [fileMenu, setFileMenu] = useState<{ path: string; x: number; y: number } | null>(null);
+  const [theme, setTheme] = useState<UiTheme>(() => {
+    const initial = readStoredTheme();
+    applyTheme(initial);
+    return initial;
+  });
+
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
+
+  const toggleTheme = useCallback((): void => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  }, []);
 
   const docRef = useRef<NoteDoc | null>(null);
   const bodyRef = useRef('');
@@ -84,6 +167,14 @@ export function App({ client }: { client: YanClient }): React.ReactElement {
       setTree(await client.vault.tree());
     } catch {
       setTree([]);
+    }
+  }, [client]);
+
+  const refreshFolders = useCallback(async () => {
+    try {
+      setFolders(await client.vault.listFolders());
+    } catch {
+      setFolders(null);
     }
   }, [client]);
 
@@ -165,18 +256,229 @@ export function App({ client }: { client: YanClient }): React.ReactElement {
     [openPath],
   );
 
+
+  const openMarkdownGuide = useCallback(async (): Promise<void> => {
+    try {
+      await client.notes.read(MARKDOWN_GUIDE_PATH);
+      await openPath(MARKDOWN_GUIDE_PATH);
+      setMode('preview');
+      setBody(bodyRef.current);
+      setStatus(MARKDOWN_GUIDE_PATH);
+      return;
+    } catch {
+      /* 不存在则写入，不覆盖已有 */
+    }
+    try {
+      const created = await client.notes.create({
+        type: 'knowledge',
+        title: MARKDOWN_GUIDE_TITLE,
+        body: markdownGuideBody.replace(/^\uFEFF/, ''),
+      });
+      await refreshTree();
+      await openPath(created.path);
+      setMode('preview');
+      setBody(bodyRef.current);
+      setStatus(`已写入 ${created.path}`);
+    } catch (e) {
+      const err = e as { message?: string };
+      setStatus(`打开 Markdown 说明失败：${err.message ?? '未知错误'}`);
+    }
+  }, [client, openPath, refreshTree]);
+
   const createNote = useCallback(
-    async (type: NoteType): Promise<void> => {
+    async (type: NoteType, dir?: string): Promise<void> => {
       const label = NEW_TYPES.find((t) => t.type === type)?.label ?? '笔记';
-      const title = window.prompt(`新建${label} · 标题`, `${label} ${new Date().toLocaleDateString('zh-CN')}`);
+      const where = dir ? `到 ${dir}` : '';
+      const title = window.prompt(`新建${label}${where} · 标题`, `${label} ${new Date().toLocaleDateString('zh-CN')}`);
       if (!title) return;
-      const created = await client.notes.create({ type, title });
+      const created = await client.notes.create({ type, title, dir });
       await refreshTree();
       await openPath(created.path);
       setStatus(`已新建 ${created.path}`);
     },
     [client, openPath, refreshTree],
   );
+
+  const createFolder = useCallback(
+    async (title: string, pathInput: string): Promise<void> => {
+      const path = sanitizeFolderPathInput(pathInput || title);
+      if (!path) {
+        setStatus('请填写目录名');
+        return;
+      }
+      try {
+        const next = await client.vault.createFolder({ path, title: title.trim() || path });
+        setFolders(next);
+        await refreshTree();
+        setFolderDialog(null);
+        setStatus(`已建文件夹 ${path}`);
+      } catch (e) {
+        const err = e as { message?: string };
+        setStatus(`新建文件夹失败：${err.message ?? '未知错误'}`);
+      }
+    },
+    [client, refreshTree],
+  );
+
+  const renameFolder = useCallback(
+    async (from: string, toRaw: string, title: string): Promise<void> => {
+      const to = sanitizeFolderPathInput(toRaw);
+      if (!to) {
+        setStatus('目录名不能为空');
+        return;
+      }
+      try {
+        const next = await client.vault.renameFolder({ from, to, title: title.trim() || undefined });
+        setFolders(next);
+        await refreshTree();
+        setFolderDialog(null);
+        setStatus(`已重命名 ${from} → ${to}`);
+      } catch (e) {
+        const err = e as { message?: string };
+        setStatus(`重命名失败：${err.message ?? '未知错误'}`);
+      }
+    },
+    [client, refreshTree],
+  );
+
+  const deleteFolder = useCallback(
+    async (path: string): Promise<void> => {
+      const ok = window.confirm(`删除文件夹「${path}」？
+空目录可删；有内容则拒绝（不会清笔记）。
+若正用作收件箱且还有其他分类，会自动把收件箱迁过去。`);
+      if (!ok) return;
+      try {
+        const next = await client.vault.deleteFolder({ path, mode: 'refuse-if-not-empty' });
+        setFolders(next);
+        await refreshTree();
+        setStatus(`已删除文件夹 ${path}`);
+      } catch (e) {
+        const err = e as { message?: string };
+        const msg = err.message ?? '未知错误';
+        if (msg.includes('非空')) {
+          const force = window.confirm(`${msg}
+
+确定要连同里面的笔记一起删除吗？此操作不可恢复。`);
+          if (!force) {
+            setStatus('已取消删除');
+            return;
+          }
+          try {
+            const next = await client.vault.deleteFolder({ path, mode: 'delete-recursive' });
+            setFolders(next);
+            await refreshTree();
+            setStatus(`已递归删除 ${path}`);
+          } catch (e2) {
+            const err2 = e2 as { message?: string };
+            setStatus(`删除失败：${err2.message ?? '未知错误'}`);
+          }
+        } else {
+          setStatus(`删除失败：${msg}`);
+        }
+      }
+    },
+    [client, refreshTree],
+  );
+
+  const setInboxFolder = useCallback(
+    async (path: string): Promise<void> => {
+      try {
+        const next = await client.vault.setInbox(path);
+        setFolders(next);
+        setStatus(`随记收件箱 → ${path}`);
+      } catch (e) {
+        const err = e as { message?: string };
+        setStatus(`设置收件箱失败：${err.message ?? '未知错误'}`);
+      }
+    },
+    [client],
+  );
+
+  const clearOpenNote = useCallback(
+    (path: string): void => {
+      setTabs((prev) => prev.filter((x) => x.path !== path));
+      if (active === path || docRef.current?.path === path) {
+        setActive(null);
+        setDoc(null);
+        docRef.current = null;
+        bodyRef.current = '';
+        pendingRef.current = null;
+        setBody('');
+        setFramework(null);
+        setBacklinks([]);
+      }
+    },
+    [active],
+  );
+
+  const deleteNote = useCallback(
+    async (path: string, mode: 'trash' | 'hard' = 'trash'): Promise<void> => {
+      const label = withoutExt(path);
+      if (mode === 'hard') {
+        const ok = window.confirm(`永久删除「${label}」？\n此操作不可恢复。`);
+        if (!ok) return;
+      } else {
+        const ok = window.confirm(`将「${label}」移入回收站（.yan/trash）？\n可从库内手动恢复。`);
+        if (!ok) return;
+      }
+      try {
+        await doSave();
+        const result = await client.notes.delete({ path, mode });
+        clearOpenNote(path);
+        await refreshTree();
+        setStatus(
+          result.mode === 'trash'
+            ? `已移入回收站：${result.trashedTo ?? path}`
+            : `已永久删除 ${path}`,
+        );
+      } catch (e) {
+        const err = e as { message?: string };
+        setStatus(`删除失败：${err.message ?? '未知错误'}`);
+      }
+    },
+    [client, clearOpenNote, doSave, refreshTree],
+  );
+
+  const moveNote = useCallback(
+    async (from: string, folder: string): Promise<void> => {
+      const name = baseName(from);
+      const to = folder ? `${folder}/${name}` : name;
+      if (to === from) {
+        setStatus('已在该文件夹');
+        return;
+      }
+      try {
+        await doSave();
+        await client.notes.rename(from, to);
+        clearOpenNote(from);
+        await refreshTree();
+        await openPath(to);
+        setStatus(`已移动 → ${to}`);
+      } catch (e) {
+        const err = e as { message?: string };
+        setStatus(`移动失败：${err.message ?? '未知错误'}`);
+      }
+    },
+    [client, clearOpenNote, doSave, openPath, refreshTree],
+  );
+
+  const insertPitfallTemplate = useCallback((): void => {
+    const current = bodyRef.current;
+    if (current.includes('## 症状')) {
+      setStatus('正文已有五段模板');
+      return;
+    }
+    const next = current.trim() ? `${current.trimEnd()}\n\n${PITFALL_TEMPLATE}` : PITFALL_TEMPLATE;
+    bodyRef.current = next;
+    pendingRef.current = next;
+    setBody(next);
+    setMode('edit');
+    if (timerRef.current) window.clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(() => {
+      void doSave();
+    }, 200);
+    setStatus('已插入踩坑五段模板');
+  }, [doSave]);
 
   const setNodeState = useCallback(
     async (line: number, state: Mastery): Promise<void> => {
@@ -259,6 +561,17 @@ export function App({ client }: { client: YanClient }): React.ReactElement {
     }
   }, [doc]);
 
+  const openTodayInbox = useCallback(async (): Promise<void> => {
+    const path = captureFlash?.file ?? todayInboxPath(folders?.inbox ?? '00-inbox');
+    try {
+      await openPath(path);
+      if (captureFlash?.line) setHighlightLine(captureFlash.line);
+      setCaptureFlash(null);
+    } catch {
+      setStatus(`今日 inbox 还不存在：${path}（先用 Ctrl+Alt+Space 归档一条）`);
+    }
+  }, [captureFlash, folders?.inbox, openPath]);
+
   // 初始化
   useEffect(() => {
     void (async () => {
@@ -266,20 +579,27 @@ export function App({ client }: { client: YanClient }): React.ReactElement {
         const info = await client.vault.info();
         setVault(info);
         await refreshTree();
+        await refreshFolders();
       } catch {
         setNeedVault(true);
       }
     })();
-  }, [client, refreshTree]);
+  }, [client, refreshFolders, refreshTree]);
 
   // 事件订阅
   useEffect(
     () =>
       client.events.subscribe((e) => {
         if (e.type === 'vault:changed') void refreshTree();
-        if (e.type === 'capture:saved') setStatus('随记已归档');
+        if (e.type === 'capture:saved') {
+          const file = 'file' in e && typeof e.file === 'string' ? e.file : todayInboxPath(folders?.inbox ?? '00-inbox');
+          const line = 'line' in e && typeof e.line === 'number' ? e.line : 0;
+          setCaptureFlash({ file, line });
+          setStatus(`随记已归档 → ${file}`);
+          void refreshTree();
+        }
       }),
-    [client, refreshTree],
+    [client, folders?.inbox, refreshTree],
   );
 
   // 快捷键
@@ -287,6 +607,18 @@ export function App({ client }: { client: YanClient }): React.ReactElement {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape' && present) {
         setPresent(false);
+        return;
+      }
+      const t = e.target as HTMLElement | null;
+      const typing =
+        !!t &&
+        (t.tagName === 'INPUT' ||
+          t.tagName === 'TEXTAREA' ||
+          t.isContentEditable ||
+          !!t.closest('.cm-editor'));
+      if (!typing && (e.key === 'Delete' || e.key === 'Backspace') && active) {
+        e.preventDefault();
+        void deleteNote(active, e.shiftKey ? 'hard' : 'trash');
         return;
       }
       const mod = e.ctrlKey || e.metaKey;
@@ -313,7 +645,7 @@ export function App({ client }: { client: YanClient }): React.ReactElement {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [present]);
+  }, [present, active, deleteNote]);
 
   const openVault = async (): Promise<void> => {
     if (!vaultInput.trim()) return;
@@ -324,12 +656,41 @@ export function App({ client }: { client: YanClient }): React.ReactElement {
   };
 
   const commandItems = useMemo<PaletteItem[]>(() => {
-    const actions: PaletteItem[] = NEW_TYPES.map((t) => ({
-      id: `new-${t.type}`,
-      label: `新建${t.label}`,
-      hint: '命令',
-      run: () => void createNote(t.type),
-    }));
+    const folderActions: PaletteItem[] = [
+      {
+        id: 'folder-create',
+        label: '新建文件夹',
+        hint: '文件夹',
+        run: () => setFolderDialog({ mode: 'create' }),
+      },
+      {
+        id: 'folder-manage',
+        label: '管理文件夹',
+        hint: '文件夹',
+        run: () => setFolderDialog({ mode: 'manage' }),
+      },
+      ...(folders?.folders ?? []).map((f) => ({
+        id: `new-in-${f.path}`,
+        label: `在「${f.title}」中新建笔记`,
+        hint: f.path,
+        run: () => void createNote('note', f.path),
+      })),
+    ];
+    const actions: PaletteItem[] = [
+      {
+        id: 'markdown-guide',
+        label: '打开 Markdown 写法说明',
+        hint: '帮助',
+        run: () => void openMarkdownGuide(),
+      },
+      ...NEW_TYPES.map((t) => ({
+        id: `new-${t.type}`,
+        label: `新建${t.label}`,
+        hint: '命令',
+        run: () => void createNote(t.type),
+      })),
+      ...folderActions,
+    ];
     const files: PaletteItem[] = [];
     const walk = (nodes: FileNode[]): void => {
       for (const n of nodes) {
@@ -339,7 +700,7 @@ export function App({ client }: { client: YanClient }): React.ReactElement {
     };
     walk(tree);
     return [...actions, ...files];
-  }, [createNote, openPath, tree]);
+  }, [createNote, folders, openMarkdownGuide, openPath, tree]);
 
   const searchFn = useCallback(
     async (q: string): Promise<PaletteItem[]> => {
@@ -353,6 +714,11 @@ export function App({ client }: { client: YanClient }): React.ReactElement {
     },
     [client, openPath],
   );
+
+  const openFirstNote = useCallback((): void => {
+    const leaf = firstNoteLeaf(tree);
+    if (leaf) void openPath(leaf.path);
+  }, [openPath, tree]);
 
   const openByName = useCallback(
     async (name: string): Promise<void> => {
@@ -375,9 +741,9 @@ export function App({ client }: { client: YanClient }): React.ReactElement {
     return (
       <div className="vault-open">
         <div className="vault-card">
-          <h1>砚 · Yan</h1>
+          <h1>Flyleaf</h1>
           <p>输入一个文件夹路径作为 vault（不存在会自动创建）</p>
-          <input className="input" value={vaultInput} onChange={(e) => setVaultInput(e.target.value)} placeholder="C:\\Users\\你\\Documents\\yan-vault" />
+          <input className="input" value={vaultInput} onChange={(e) => setVaultInput(e.target.value)} placeholder="C:\\Users\\你\\Documents\\flyleaf-vault" />
           <button className="btn primary" onClick={() => void openVault()}>
             打开
           </button>
@@ -388,38 +754,77 @@ export function App({ client }: { client: YanClient }): React.ReactElement {
 
   const isFramework = framework !== null && doc !== null && String(doc.frontmatter.type) === 'framework';
   const isExperiment = doc !== null && String(doc.frontmatter.type) === 'experiment';
+  const isPitfall = doc !== null && String(doc.frontmatter.type) === 'pitfall';
+  const showPitfallInsert = isPitfall && !bodyRef.current.includes('## 症状') && !body.includes('## 症状');
 
   return (
     <div className={`app ${present ? 'present' : ''}`}>
       <aside className="sidebar">
         <div className="sidebar-head">
-          <span className="brand">砚</span>
+          <span className="brand">Flyleaf</span>
           <span className="vault-name">{vault?.name ?? '—'}</span>
-          <button className="icon-btn" title="刷新" onClick={() => void refreshTree()}>
-            ↻
+          <button
+            className="icon-btn theme-toggle"
+            title={theme === 'dark' ? '切换浅色主题' : '切换深色主题'}
+            onClick={toggleTheme}
+          >
+            {theme === 'dark' ? '浅色' : '深色'}
+          </button>
+          <button className="icon-btn" title="刷新文件树" onClick={() => void refreshTree()}>
+            刷新
           </button>
         </div>
 
         <div className="sidebar-actions">
           <button className="btn ghost" onClick={() => setPalette('command')}>
-            <span>＋ 新建</span>
-            <kbd>Ctrl P</kbd>
+            <span>+ 新建</span>
+            <kbd>Ctrl+P</kbd>
           </button>
           <button className="btn ghost" onClick={() => setPalette('search')}>
-            <span>⌕ 搜索</span>
-            <kbd>Ctrl ⇧ P</kbd>
+            <span>搜索</span>
+            <kbd>Ctrl+Shift+F</kbd>
+          </button>
+          <button className="btn ghost" onClick={() => setFolderDialog({ mode: 'create' })} title="新建或管理文件夹">
+            <span>文件夹</span>
           </button>
         </div>
 
-        <div className="tree">
-          <TreeView nodes={tree} activePath={active} onOpen={(p) => void openPath(p)} />
+        <div
+          className="tree"
+          onClick={() => {
+            setDirMenu(null);
+            setFileMenu(null);
+          }}
+        >
+          <TreeView
+            nodes={tree}
+            activePath={active}
+            onOpen={(p) => void openPath(p)}
+            onDirMenu={(path, x, y) => {
+              setFileMenu(null);
+              setDirMenu({ path, x, y });
+            }}
+            onFileMenu={(path, x, y) => {
+              setDirMenu(null);
+              setFileMenu({ path, x, y });
+            }}
+          />
         </div>
 
         <div className="sidebar-foot">
           <span>{vault?.noteCount ?? 0} 篇</span>
           <span className="dot" />
-          <span>{status}</span>
+          {captureFlash ? (
+            <button className="status-link" title="打开今日 inbox" onClick={() => void openTodayInbox()}>
+              随记已归档 · 打开今日 inbox
+            </button>
+          ) : (
+            <span className="status-text" title={status}>
+              {status}
+            </span>
+          )}
         </div>
+        <div className="sidebar-tip">关窗口进托盘，不退出；随记 Ctrl+Alt+Space</div>
       </aside>
 
       <main className="main">
@@ -456,16 +861,78 @@ export function App({ client }: { client: YanClient }): React.ReactElement {
           ))}
           <div className="tabbar-fill" />
           {doc && (
-            <button className="btn ghost" onClick={() => { setMode((m) => (m === 'edit' ? 'preview' : 'edit')); setBody(bodyRef.current); }}>
-              {mode === 'edit' ? '预览' : '编辑'} <kbd>Ctrl E</kbd>
-            </button>
+            <div className="tabbar-actions">
+              <div className="seg">
+                <button
+                  className={mode === 'edit' ? 'seg-on' : ''}
+                  onClick={() => {
+                    setMode('edit');
+                    setBody(bodyRef.current);
+                  }}
+                  title="编辑 Ctrl+E"
+                >
+                  编辑
+                </button>
+                <button
+                  className={mode === 'preview' ? 'seg-on' : ''}
+                  onClick={() => {
+                    setMode('preview');
+                    setBody(bodyRef.current);
+                  }}
+                  title="预览 Ctrl+E"
+                >
+                  预览
+                </button>
+              </div>
+              {showPitfallInsert && (
+                <button className="btn ghost" onClick={insertPitfallTemplate} title="插入症状/环境/原因/解法/验证">
+                  插入模板
+                </button>
+              )}
+              <button
+                className="btn ghost"
+                onClick={() => {
+                  setPresent(true);
+                  setMode('preview');
+                  setBody(bodyRef.current);
+                }}
+                title="呈现模式 Ctrl+Shift+P"
+              >
+                呈现 <kbd>Ctrl+Shift+P</kbd>
+              </button>
+            </div>
           )}
         </div>
 
         <div className="content">
+          <div key={active ?? 'empty'} className="content-pane">
           {!doc && (
             <div className="empty">
-              <div>从左侧选一篇，或按 Ctrl+P 新建</div>
+              <div className="empty-title">开始三步</div>
+              {firstNoteLeaf(tree) ? (
+                <button className="empty-step" onClick={openFirstNote}>
+                  <span className="empty-num">1</span>
+                  <span>打开第一篇笔记</span>
+                </button>
+              ) : (
+                <div className="empty-step empty-step-static" role="note">
+                  <span className="empty-num">1</span>
+                  <span>左侧还没有笔记，可点第 2 步新建</span>
+                </div>
+              )}
+              <button className="empty-step" onClick={() => setPalette('command')}>
+                <span className="empty-num">2</span>
+                <span>
+                  点「新建」走命令面板（默认踩坑） <kbd>Ctrl+P</kbd>
+                </span>
+              </button>
+              <div className="empty-step empty-step-static" role="note" title="主窗暂无打开随记卡的 API，请用全局热键">
+                <span className="empty-num">3</span>
+                <span>
+                  桌面随记请按 <kbd>Ctrl+Alt+Space</kbd>（写完 Ctrl+Enter 归档）
+                </span>
+              </div>
+              <div className="empty-foot">关闭主窗口会收进托盘，不会退出；要退出请右键托盘图标。不会写 Markdown？命令面板搜「Markdown」。侧栏「文件夹」可增删自定义分类。</div>
             </div>
           )}
 
@@ -487,7 +954,7 @@ export function App({ client }: { client: YanClient }): React.ReactElement {
             <div className="doc-wrap">
               {isExperiment && <ExperimentChart body={bodyRef.current} />}
               <div className="doc-main">
-                <Editor docKey={doc.path} value={bodyRef.current} onChange={onBodyChange} />
+                <Editor docKey={doc.path} value={bodyRef.current} onChange={onBodyChange} uiTheme={theme} />
               </div>
             </div>
           )}
@@ -513,26 +980,35 @@ export function App({ client }: { client: YanClient }): React.ReactElement {
               </div>
             </div>
           )}
+          </div>
         </div>
       </main>
 
       {doc && !isFramework && (
-        <aside className="right">
-          <MetaPanel doc={doc} onSave={(patch) => void saveMeta(patch)} />
-          <div className="right-head">反向链接</div>
-          <div className="right-body">
-            {backlinks.length === 0 && <div className="right-empty">没有笔记链接到这里</div>}
-            {backlinks.map((b) => (
-              <div key={b.path} className="backlink" onClick={() => void openPath(b.path)} title={`${b.path}:${b.line}`}>
-                <div className="backlink-title">{b.title}</div>
-                <div className="backlink-path">{b.path}</div>
-              </div>
-            ))}
+        <aside key={doc.path} className="right anim-in">
+          <div className="right-section">
+            <div className="right-head">属性</div>
+            <MetaPanel doc={doc} onSave={(patch) => void saveMeta(patch)} />
           </div>
-          <div className="right-foot">
-            {doc.path}
-            <br />
-            {String(doc.frontmatter.type ?? 'note')}
+          <div className="right-section right-section-grow">
+            <div className="right-head">反向链接</div>
+            <div className="right-body">
+              {backlinks.length === 0 && <div className="right-empty">没有笔记链接到这里</div>}
+              {backlinks.map((b) => (
+                <div key={b.path} className="backlink" onClick={() => void openPath(b.path)} title={`${b.path}:${b.line}`}>
+                  <div className="backlink-title">{b.title}</div>
+                  <div className="backlink-path">{b.path}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="right-section">
+            <div className="right-head">路径</div>
+            <div className="right-foot">
+              {doc.path}
+              <br />
+              {String(doc.frontmatter.type ?? 'note')}
+            </div>
           </div>
         </aside>
       )}
@@ -565,18 +1041,138 @@ export function App({ client }: { client: YanClient }): React.ReactElement {
       {palette === 'search' && (
         <Palette placeholder="全文搜索（中文可直接搜）…" search={searchFn} onClose={() => setPalette(null)} />
       )}
+
+      {folderDialog && (
+        <FolderDialog
+          key={folderDialog.mode === 'rename' ? `rename:${folderDialog.path}` : folderDialog.mode}
+          state={folderDialog}
+          folders={folders}
+          inbox={folders?.inbox ?? '00-inbox'}
+          onClose={() => setFolderDialog(null)}
+          onCreate={(title, path) => void createFolder(title, path)}
+          onRename={(from, to, title) => void renameFolder(from, to, title)}
+          onDelete={(path) => void deleteFolder(path)}
+          onSetInbox={(path) => void setInboxFolder(path)}
+          onOpenCreate={() => setFolderDialog({ mode: 'create' })}
+          onOpenRename={(path, title) => setFolderDialog({ mode: 'rename', path, title })}
+        />
+      )}
+
+      {dirMenu && (
+        <div className="dir-menu-backdrop" onClick={() => setDirMenu(null)}>
+          <div
+            className="dir-menu"
+            style={{ left: dirMenu.x, top: dirMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                const f = folders?.folders.find((x) => x.path === dirMenu.path);
+                setFolderDialog({ mode: 'rename', path: dirMenu.path, title: f?.title ?? dirMenu.path });
+                setDirMenu(null);
+              }}
+            >
+              重命名
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void createNote('note', dirMenu.path);
+                setDirMenu(null);
+              }}
+            >
+              在此新建笔记
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void setInboxFolder(dirMenu.path);
+                setDirMenu(null);
+              }}
+            >
+              设为随记收件箱
+            </button>
+            <button
+              type="button"
+              className="danger"
+              onClick={() => {
+                const p = dirMenu.path;
+                setDirMenu(null);
+                void deleteFolder(p);
+              }}
+            >
+              删除
+            </button>
+          </div>
+        </div>
+      )}
+
+      {fileMenu && (
+        <div className="dir-menu-backdrop" onClick={() => setFileMenu(null)}>
+          <div
+            className="dir-menu"
+            style={{ left: fileMenu.x, top: fileMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="danger"
+              onClick={() => {
+                const p = fileMenu.path;
+                setFileMenu(null);
+                void deleteNote(p, 'trash');
+              }}
+            >
+              删除（进回收站）
+            </button>
+            <button
+              type="button"
+              className="danger"
+              onClick={() => {
+                const p = fileMenu.path;
+                setFileMenu(null);
+                void deleteNote(p, 'hard');
+              }}
+            >
+              永久删除
+            </button>
+            <div className="dir-menu-sep" />
+            <div className="dir-menu-label">移动到</div>
+            {(folders?.folders ?? []).map((f) => (
+              <button
+                key={f.path}
+                type="button"
+                onClick={() => {
+                  const p = fileMenu.path;
+                  setFileMenu(null);
+                  void moveNote(p, f.path);
+                }}
+              >
+                {f.title}
+                {folders?.inbox === f.path ? ' · 收件箱' : ''}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
 
 function TreeView({
   nodes,
   activePath,
   onOpen,
+  onDirMenu,
+  onFileMenu,
 }: {
   nodes: FileNode[];
   activePath: string | null;
   onOpen: (path: string) => void;
+  onDirMenu?: (path: string, x: number, y: number) => void;
+  onFileMenu?: (path: string, x: number, y: number) => void;
 }): React.ReactElement {
   const [open, setOpen] = useState<Set<string>>(new Set());
 
@@ -595,7 +1191,16 @@ function TreeView({
         const expanded = open.has(n.path) || depth === 0;
         return (
           <div key={n.path}>
-            <div className="tree-row dir" style={{ paddingLeft: depth * 12 + 6 }} onClick={() => toggle(n.path)}>
+            <div
+              className="tree-row dir"
+              style={{ paddingLeft: depth * 12 + 6 }}
+              onClick={() => toggle(n.path)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                onDirMenu?.(n.path, e.clientX, e.clientY);
+              }}
+              title={`${n.path}（右键管理）`}
+            >
               <span className="tree-caret">{expanded ? '▾' : '▸'}</span>
               <span className="tree-name">{n.name}</span>
             </div>
@@ -609,7 +1214,11 @@ function TreeView({
           className={`tree-row file ${activePath === n.path ? 'on' : ''}`}
           style={{ paddingLeft: depth * 12 + 20 }}
           onClick={() => onOpen(n.path)}
-          title={n.path}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            onFileMenu?.(n.path, e.clientX, e.clientY);
+          }}
+          title={`${n.path}（右键删除/移动）`}
         >
           <span className="tree-name">{withoutExt(n.name)}</span>
         </div>
@@ -617,4 +1226,134 @@ function TreeView({
     });
 
   return <>{render(nodes, 0)}</>;
+}
+
+function FolderDialog({
+  state,
+  folders,
+  inbox,
+  onClose,
+  onCreate,
+  onRename,
+  onDelete,
+  onSetInbox,
+  onOpenCreate,
+  onOpenRename,
+}: {
+  state: { mode: 'create' } | { mode: 'rename'; path: string; title: string } | { mode: 'manage' };
+  folders: FoldersConfig | null;
+  inbox: string;
+  onClose: () => void;
+  onCreate: (title: string, path: string) => void;
+  onRename: (from: string, to: string, title: string) => void;
+  onDelete: (path: string) => void;
+  onSetInbox: (path: string) => void;
+  onOpenCreate: () => void;
+  onOpenRename: (path: string, title: string) => void;
+}): React.ReactElement {
+  const [title, setTitle] = useState(state.mode === 'rename' ? state.title : '');
+  const [path, setPath] = useState(state.mode === 'rename' ? state.path : '');
+  const [pathTouched, setPathTouched] = useState(state.mode === 'rename');
+
+  const syncPathFromTitle = (t: string): void => {
+    setTitle(t);
+    if (!pathTouched && state.mode === 'create') {
+      setPath(sanitizeFolderPathInput(t));
+    }
+  };
+
+  return (
+    <div className="folder-modal-backdrop" onClick={onClose}>
+      <div className="folder-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        {state.mode === 'manage' ? (
+          <>
+            <div className="folder-modal-head">
+              <strong>管理文件夹</strong>
+              <button type="button" className="icon-btn" onClick={onClose}>
+                关闭
+              </button>
+            </div>
+            <p className="folder-modal-hint">
+              随记收件箱：<code>{inbox}</code>。也可在侧栏文件夹上右键操作。
+            </p>
+            <ul className="folder-list">
+              {(folders?.folders ?? []).map((f) => (
+                <li key={f.path}>
+                  <div className="folder-list-main">
+                    <span className="folder-list-title">{f.title}</span>
+                    <code>{f.path}</code>
+                    {f.path === inbox && <span className="folder-badge">inbox</span>}
+                  </div>
+                  <div className="folder-list-actions">
+                    <button type="button" onClick={() => onSetInbox(f.path)}>
+                      设为收件箱
+                    </button>
+                    <button type="button" onClick={() => onOpenRename(f.path, f.title)}>
+                      重命名
+                    </button>
+                    <button type="button" className="danger" onClick={() => onDelete(f.path)}>
+                      删除
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="folder-modal-foot">
+              <button type="button" className="btn ghost" onClick={onOpenCreate}>
+                新建文件夹
+              </button>
+              <button type="button" className="btn" onClick={onClose}>
+                完成
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="folder-modal-head">
+              <strong>{state.mode === 'create' ? '新建文件夹' : '重命名文件夹'}</strong>
+              <button type="button" className="icon-btn" onClick={onClose}>
+                关闭
+              </button>
+            </div>
+            <label className="folder-field">
+              <span>显示名</span>
+              <input
+                value={title}
+                onChange={(e) => syncPathFromTitle(e.target.value)}
+                placeholder="例如：材质研究"
+                autoFocus
+              />
+            </label>
+            <label className="folder-field">
+              <span>目录名（相对库，一层或两层）</span>
+              <input
+                value={path}
+                onChange={(e) => {
+                  setPathTouched(true);
+                  setPath(sanitizeFolderPathInput(e.target.value));
+                }}
+                placeholder="例如：研究/材质 或 材质研究"
+              />
+            </label>
+            <p className="folder-modal-hint">Windows 可用中文路径；不要用 .. 或绝对路径。</p>
+            <div className="folder-modal-foot">
+              <button type="button" className="btn ghost" onClick={onClose}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  if (state.mode === 'create') onCreate(title, path);
+                  else onRename(state.path, path, title);
+                }}
+              >
+                {state.mode === 'create' ? '创建' : '保存'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
 }

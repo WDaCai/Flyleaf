@@ -1,9 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
-const IPC_INVOKE = 'yan:invoke';
-const IPC_EVENT = 'yan:event';
+const IPC_INVOKE = 'flyleaf:invoke';
+const IPC_EVENT = 'flyleaf:event';
 
-contextBridge.exposeInMainWorld('yan', {
+contextBridge.exposeInMainWorld('flyleaf', {
   invoke: (channel: string, payload?: unknown): Promise<unknown> => ipcRenderer.invoke(channel, payload),
   on: (channel: string, cb: (payload: unknown) => void): (() => void) => {
     const handler = (_e: unknown, payload: unknown): void => cb(payload);

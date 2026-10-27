@@ -6,8 +6,8 @@ export interface IpcBridge {
   on(channel: string, cb: (payload: unknown) => void): () => void;
 }
 
-export const IPC_INVOKE = 'yan:invoke';
-export const IPC_EVENT = 'yan:event';
+export const IPC_INVOKE = 'flyleaf:invoke';
+export const IPC_EVENT = 'flyleaf:event';
 
 export function createIpcClient(bridge: IpcBridge): YanClient {
   const call = <T>(method: string, ...args: unknown[]): Promise<T> =>
@@ -19,6 +19,11 @@ export function createIpcClient(bridge: IpcBridge): YanClient {
       info: () => call('vault.info'),
       tree: () => call('vault.tree'),
       recent: (limit) => call('vault.recent', limit),
+      listFolders: () => call('vault.listFolders'),
+      createFolder: (input) => call('vault.createFolder', input),
+      renameFolder: (input) => call('vault.renameFolder', input),
+      deleteFolder: (input) => call('vault.deleteFolder', input),
+      setInbox: (path) => call('vault.setInbox', path),
     },
     notes: {
       read: (path) => call('notes.read', path),
@@ -28,6 +33,7 @@ export function createIpcClient(bridge: IpcBridge): YanClient {
       rename: async (from, to) => {
         await call('notes.rename', from, to);
       },
+      delete: (input) => call('notes.delete', typeof input === 'string' ? { path: input } : input),
       backlinks: (path) => call('notes.backlinks', path),
     },
     search: {

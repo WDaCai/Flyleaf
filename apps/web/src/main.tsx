@@ -1,10 +1,10 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import '@yan/ui/tokens.css';
+import '@flyleaf/ui/tokens.css';
 import './styles.css';
 import './present.css';
 import { App } from './App';
-import { createHttpClient } from '@yan/core/client';
+import { createHttpClient } from '@flyleaf/core/client';
 
 const client = createHttpClient();
 

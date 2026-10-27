@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { hierarchy, tree as d3tree } from 'd3-hierarchy';
-import type { FrameworkTree, NavTarget, TreeNode } from '@yan/core/contracts';
-import { STATE_GLYPH } from '@yan/ui';
+import type { FrameworkTree, NavTarget, TreeNode } from '@flyleaf/core/contracts';
+import { STATE_GLYPH } from '@flyleaf/ui';
 
 const NODE_W = 196;
 const NODE_H = 26;

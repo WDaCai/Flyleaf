@@ -11,6 +11,7 @@ export const STATE_CLASS: Record<string, string> = {
   used: 'state-used',
 };
 
+/** 四档掌握度符号：优先用常见几何字符，缺字形时仍比花体稳 */
 export const STATE_GLYPH: Record<string, string> = {
   todo: '○',
   learning: '◐',

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { NoteDoc } from '@yan/core/contracts';
+import type { NoteDoc } from '@flyleaf/core/contracts';
 
 export interface MetaPanelProps {
   doc: NoteDoc;

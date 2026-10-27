@@ -10,7 +10,7 @@ const STATE_GLYPH: Record<string, string> = {
   '*': '★',
 };
 
-/** 把砚的扩展语法翻译成标准 markdown */
+/** 把 Flyleaf 的扩展语法翻译成标准 markdown */
 export function transform(src: string): string {
   const withState = src.replace(/^(\s*[-*+]\s+)\[([ xX~*])\]/gm, (_m, prefix: string, ch: string) => {
     return `${prefix}${STATE_GLYPH[ch] ?? '○'}`;

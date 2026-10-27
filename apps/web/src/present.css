@@ -8,6 +8,9 @@
 .doc-main {
   flex: 1;
   min-height: 0;
+  max-width: var(--editor-max);
+  margin: 0 auto;
+  width: 100%;
 }
 
 /* ---------- 属性面板 ---------- */
@@ -24,14 +27,14 @@
   margin-bottom: 6px;
 }
 .meta-type {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--accent);
   border: 1px solid var(--accent-dim);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 0 6px;
 }
 .meta-status {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-faint);
 }
 .meta-row {
@@ -43,7 +46,7 @@
 .meta-label {
   flex: none;
   width: 52px;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-faint);
 }
 .meta-input {
@@ -53,8 +56,8 @@
   padding: 0 6px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 4px;
-  font-size: 12px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
   color: var(--text);
   outline: none;
 }
@@ -66,7 +69,7 @@
   background: var(--bg);
 }
 .meta-input::placeholder {
-  color: #3d444f;
+  color: var(--meta-placeholder);
 }
 
 /* ---------- 实验对比图 ---------- */
@@ -83,18 +86,18 @@
   margin-bottom: 2px;
 }
 .exp-title {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-dim);
 }
 .exp-sub {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-faint);
 }
 .exp-legend {
   margin-left: auto;
   display: flex;
   gap: 12px;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-faint);
 }
 .exp-legend-item {
@@ -106,7 +109,7 @@
   display: inline-block;
   width: 8px;
   height: 8px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 .exp-svg {
   width: 100%;
@@ -145,9 +148,9 @@
 .exp-bar {
   width: 100%;
   max-width: 46px;
-  border-radius: 3px 3px 0 0;
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
   min-height: 3px;
-  transition: height 0.18s ease;
+  transition: height var(--dur-mid) var(--ease-soft);
 }
 .exp-val {
   font-family: var(--mono);
@@ -168,12 +171,14 @@
 
 /* ---------- 呈现模式 ---------- */
 .present-shell {
+  font-family: var(--sans);
   position: fixed;
   inset: 0;
   z-index: 80;
   overflow: auto;
   padding: 66px 0 90px;
-  background: #f4f3ef;
+  background: var(--present-bg);
+  animation: fl-fade-in var(--dur-mid) var(--ease-soft) both;
 }
 .present-bar {
   position: fixed;
@@ -186,13 +191,13 @@
   gap: 8px;
   height: 46px;
   padding: 0 18px;
-  background: rgba(18, 20, 24, 0.94);
+  background: var(--present-bar-bg);
   backdrop-filter: blur(8px);
 }
 .present-label {
   margin-right: auto;
-  color: #cfd5dd;
-  font-size: 12px;
+  color: var(--present-bar-fg);
+  font-size: var(--font-size-sm);
   letter-spacing: 1px;
 }
 .present-paper {
@@ -204,24 +209,24 @@
   margin: 0 0 22px;
   font-size: 27px;
   font-weight: 700;
-  color: #14161a;
+  color: var(--present-ink);
   letter-spacing: 0.5px;
 }
 .present-body {
-  color: #23262b;
+  color: var(--present-body);
   font-size: 15px;
   line-height: 1.9;
 }
 .present-body h1,
 .present-body h2,
 .present-body h3 {
-  color: #101216;
+  color: var(--present-ink);
   line-height: 1.4;
   margin: 1.5em 0 0.6em;
 }
 .present-body h2 {
   font-size: 19px;
-  border-bottom: 1px solid #e2dfd6;
+  border-bottom: 1px solid var(--present-line);
   padding-bottom: 6px;
 }
 .present-body h3 {
@@ -229,7 +234,7 @@
 }
 .present-body p,
 .present-body li {
-  color: #23262b;
+  color: var(--present-body);
 }
 .present-body ul,
 .present-body ol {
@@ -238,34 +243,34 @@
 .present-body blockquote {
   margin: 12px 0;
   padding: 6px 14px;
-  border-left: 3px solid #c9c4b6;
-  color: #55585e;
-  background: #efede7;
+  border-left: 3px solid var(--present-quote);
+  color: var(--present-muted);
+  background: var(--present-chip);
 }
 .present-body table {
   border-collapse: collapse;
   margin: 12px 0;
-  font-size: 14px;
+  font-size: var(--font-size);
 }
 .present-body th,
 .present-body td {
-  border: 1px solid #d9d5ca;
+  border: 1px solid var(--present-line-2);
   padding: 6px 12px;
 }
 .present-body th {
-  background: #eceae4;
+  background: var(--present-chip-2);
 }
 .present-body code {
-  background: #eceae4;
+  background: var(--present-chip-2);
   padding: 1px 5px;
-  border-radius: 4px;
-  font-size: 13px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-md);
 }
 .present-body pre {
-  background: #1b1e24;
-  color: #e6e6e6;
+  background: var(--present-code-bg);
+  color: var(--present-code-fg);
   padding: 14px 16px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow: auto;
 }
 .present-body pre code {
@@ -273,28 +278,28 @@
   padding: 0;
 }
 .present-body a {
-  color: #2f5fb3;
-  border-bottom: 1px solid #b9c7de;
+  color: var(--present-link);
+  border-bottom: 1px solid var(--present-link-line);
 }
 
 /* 呈现模式里的对比图改为浅色 */
 .present-paper .exp {
   background: transparent;
-  border-bottom: 1px solid #e2dfd6;
+  border-bottom: 1px solid var(--present-line);
   padding: 4px 0 10px;
   margin-bottom: 8px;
 }
 .present-paper .exp-title,
 .present-paper .exp-sub,
 .present-paper .exp-legend {
-  color: #6b6f76;
+  color: var(--present-muted);
 }
 .present-paper .exp-bars {
-  border-bottom-color: #d9d5ca;
+  border-bottom-color: var(--present-line-2);
 }
 .present-paper .exp-val,
 .present-paper .exp-metric {
-  color: #55585e;
+  color: var(--present-muted);
 }
 
 @media print {
@@ -306,11 +311,28 @@
   }
   .present-shell {
     position: static;
-    background: #fff;
+    background: var(--present-print-bg);
     padding: 0;
   }
   .present-paper {
     max-width: none;
     padding: 0;
   }
+}
+
+.exp-hint {
+  font-size: var(--font-size-sm);
+  color: var(--text-dim);
+  line-height: 1.6;
+  padding: 4px 2px 8px;
+}
+.exp-hint-pre {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font-size: var(--font-size-xs);
+  overflow: auto;
 }

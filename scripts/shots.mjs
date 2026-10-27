@@ -4,7 +4,7 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 
 const CHROME = process.env.CHROME_PATH ?? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-const URL = process.env.YAN_WEB ?? 'http://localhost:5173/';
+const URL = process.env.FLYLEAF_WEB ?? process.env.YAN_WEB ?? 'http://localhost:5173/';
 const OUT = path.resolve('shots');
 
 await fs.mkdir(OUT, { recursive: true });

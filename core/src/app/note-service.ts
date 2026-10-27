@@ -1,10 +1,10 @@
-import type { Backlink, CreateNoteInput, NoteDoc, NoteSummary } from '../contracts';
+import type { Backlink, CreateNoteInput, DeleteNoteInput, DeleteNoteResult, NoteDoc, NoteSummary } from '../contracts';
 import { composeDocument } from '../domain/compose';
 import { asIsoString, asString, asStringArray, parseFrontmatter } from '../domain/frontmatter';
-import { basename, dirname, joinRel, slugify, stripExt } from '../domain/paths';
+import { basename, dirname, joinRel, normalizeRel, slugify, stripExt } from '../domain/paths';
 import { splitDocument } from '../domain/text';
 import { parseWikiLinks, resolveTargetName } from '../domain/wikilink';
-import { NotFoundError } from '../errors';
+import { BadRequestError, NotFoundError } from '../errors';
 import type { IndexEntry, IndexProvider, NoteRepo, RawNote } from '../ports';
 import type { EventBus } from './event-bus';
 import { DEFAULT_DIRS, DEFAULT_TEMPLATES } from './templates';
@@ -121,6 +121,41 @@ export class NoteService {
     } catch {
       // 索引会在文件监听里补上
     }
+  }
+
+
+  async delete(input: DeleteNoteInput | string): Promise<DeleteNoteResult> {
+    const raw = typeof input === 'string' ? { path: input } : input;
+    const rel = normalizeRel(raw.path);
+    if (!rel) throw new BadRequestError('缺少笔记路径');
+    if (!rel.endsWith('.md')) throw new BadRequestError('只能删除 markdown 笔记');
+    if (rel.startsWith('.yan/') || rel === '.yan') {
+      throw new BadRequestError('不可删除系统目录下的文件');
+    }
+    if (!(await this.repo.exists(rel))) throw new NotFoundError(rel);
+
+    const mode = raw.mode ?? 'trash';
+    if (mode === 'hard') {
+      await this.repo.remove(rel);
+      this.index.remove(rel);
+      this.events.emit({ type: 'note:changed', path: rel });
+      this.events.emit({ type: 'vault:changed', paths: [rel] });
+      return { path: rel, mode: 'hard' };
+    }
+
+    // 默认进 .yan/trash，保留相对路径，便于恢复
+    let dest = joinRel('.yan/trash', rel);
+    if (await this.repo.exists(dest)) {
+      const stamp = this.now().toISOString().replace(/[:.]/g, '-');
+      const dir = dirname(rel);
+      const name = `${stripExt(basename(rel))}__${stamp}.md`;
+      dest = joinRel('.yan/trash', dir, name);
+    }
+    await this.repo.rename(rel, dest);
+    this.index.remove(rel);
+    this.events.emit({ type: 'note:changed', path: rel });
+    this.events.emit({ type: 'vault:changed', paths: [rel, dest] });
+    return { path: rel, mode: 'trash', trashedTo: dest };
   }
 
   /** 反链：哪些笔记的 wikilink 指向当前文件 */

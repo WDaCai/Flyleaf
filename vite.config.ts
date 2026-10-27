@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const r = (p: string): string => fileURLToPath(new URL(p, import.meta.url));
@@ -9,12 +10,12 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: [
-      { find: /^@yan\/ui\/tokens\.css$/, replacement: r('./ui/src/tokens.css') },
-      { find: /^@yan\/core\/contracts$/, replacement: r('./core/src/contracts.ts') },
-      { find: /^@yan\/core\/client$/, replacement: r('./core/src/client/index.ts') },
-      { find: /^@yan\/core$/, replacement: r('./core/src/index.ts') },
-      { find: /^@yan\/ui$/, replacement: r('./ui/src/index.ts') },
-      { find: /^@yan\/app$/, replacement: r('./apps/web/src') },
+      { find: /^@flyleaf\/ui\/tokens\.css$/, replacement: r('./ui/src/tokens.css') },
+      { find: /^@flyleaf\/core\/contracts$/, replacement: r('./core/src/contracts.ts') },
+      { find: /^@flyleaf\/core\/client$/, replacement: r('./core/src/client/index.ts') },
+      { find: /^@flyleaf\/core$/, replacement: r('./core/src/index.ts') },
+      { find: /^@flyleaf\/ui$/, replacement: r('./ui/src/index.ts') },
+      { find: /^@flyleaf\/app$/, replacement: r('./apps/web/src') },
     ],
   },
   server: {
@@ -30,5 +31,11 @@ export default defineConfig({
   build: {
     outDir: r('./dist/web'),
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        index: path.resolve(r('./apps/web'), 'index.html'),
+        card: path.resolve(r('./apps/web'), 'card.html'),
+      },
+    },
   },
 });

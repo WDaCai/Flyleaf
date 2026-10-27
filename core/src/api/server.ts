@@ -2,7 +2,8 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import type { CoreHost } from '../host';
 import { BadRequestError, toApiError } from '../errors';
-import type { CreateNoteInput, Mastery, SearchQuery } from '../contracts';
+import type { CreateNoteInput, DeleteNoteInput, Mastery, SearchQuery, CreateFolderInput, DeleteFolderInput, RenameFolderInput } from '../contracts';
+import { registerStatic } from './static';
 
 type Body = Record<string, unknown>;
 
@@ -11,10 +12,17 @@ function str(v: unknown, field: string): string {
   return v;
 }
 
-export function createServer(host: CoreHost): FastifyInstance {
+export interface ServerOptions {
+  /** 有值时，非 /api 请求从该目录提供静态文件（轻量壳用） */
+  staticDir?: string;
+}
+
+export function createServer(host: CoreHost, opts: ServerOptions = {}): FastifyInstance {
   const app = Fastify({ logger: false, bodyLimit: 32 * 1024 * 1024 });
 
   void app.register(cors, { origin: true });
+
+  app.get('/api/v1/health', async () => ({ ok: true }));
 
   app.setErrorHandler((err, _req, reply) => {
     const api = toApiError(err);
@@ -40,6 +48,28 @@ export function createServer(host: CoreHost): FastifyInstance {
     return guard(() => host.client.vault.recent(limit));
   });
 
+  app.get('/api/v1/vault/folders', async () => guard(() => host.client.vault.listFolders()));
+
+  app.post('/api/v1/vault/folders', async (req) => {
+    const body = (req.body ?? {}) as Body;
+    return guard(() => host.client.vault.createFolder(body as unknown as CreateFolderInput));
+  });
+
+  app.post('/api/v1/vault/folders/rename', async (req) => {
+    const body = (req.body ?? {}) as Body;
+    return guard(() => host.client.vault.renameFolder(body as unknown as RenameFolderInput));
+  });
+
+  app.post('/api/v1/vault/folders/delete', async (req) => {
+    const body = (req.body ?? {}) as Body;
+    return guard(() => host.client.vault.deleteFolder(body as unknown as DeleteFolderInput));
+  });
+
+  app.post('/api/v1/vault/folders/inbox', async (req) => {
+    const body = (req.body ?? {}) as Body;
+    return guard(() => host.client.vault.setInbox(str(body.path, 'path')));
+  });
+
   app.get('/api/v1/note', async (req) => {
     const q = (req.query ?? {}) as Body;
     return guard(() => host.client.notes.read(str(q.path, 'path')));
@@ -63,6 +93,15 @@ export function createServer(host: CoreHost): FastifyInstance {
     const body = (req.body ?? {}) as Body;
     await guard(() => host.client.notes.rename(str(body.from, 'from'), str(body.to, 'to')));
     return { ok: true };
+  });
+
+  app.post('/api/v1/note/delete', async (req) => {
+    const body = (req.body ?? {}) as Body;
+    const input: DeleteNoteInput = {
+      path: str(body.path, 'path'),
+      mode: body.mode === 'hard' ? 'hard' : body.mode === 'trash' ? 'trash' : undefined,
+    };
+    return guard(() => host.client.notes.delete(input));
   });
 
   app.get('/api/v1/backlinks', async (req) => {
@@ -135,6 +174,8 @@ export function createServer(host: CoreHost): FastifyInstance {
       unsub();
     });
   });
+
+  if (opts.staticDir) registerStatic(app, opts.staticDir);
 
   return app;
 }

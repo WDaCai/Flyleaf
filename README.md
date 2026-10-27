@@ -1,4 +1,4 @@
-# 砚 · Yan
+# Flyleaf
 
 本地优先的个人技术工作台：踩坑、性能实验、周复盘、知识树，外加一张能悬浮在屏幕上的随手记卡片。数据是纯 Markdown，随时可以扔回 Obsidian。
 
@@ -37,14 +37,25 @@ npm run dev:server -- D:\我的库  # 指定 vault
 npm run dev:web
 ```
 
-桌面壳（含悬浮卡）：
+桌面壳（Electron，约 305MB，含 Chromium）：
 
 ```powershell
 npm run build:desktop
 npm run dev:desktop
 ```
 
-> 桌面壳默认打开 `%USERPROFILE%\Documents\yan-vault`，可用环境变量 `YAN_VAULT` 覆盖。
+轻量壳（系统 WebView2 + 本机 Node，分发包不含 Node 约数 MB）：
+
+```powershell
+npm run build:lite
+# 当前分发形态：lite 主窗 + 随记卡（不做网站/同步）；可用 FLYLEAF_INSTALL 指定安装目录（默认 E:\\Flyleaf）
+.\release\Flyleaf\Flyleaf.exe
+```
+
+> 两个壳默认打开 `%USERPROFILE%\Documents\flyleaf-vault`，可用环境变量 `FLYLEAF_VAULT` 覆盖。
+> 轻量壳如果被 Windows 标成低完整性（未签名程序常见），写不了「文档」，会自动改用 `%USERPROFILE%\AppData\LocalLow\Flyleaf\vault`。
+> 轻量壳优先用同目录的 `node.exe`，否则用 PATH 里的 Node。换一台没装 Node 的电脑时，把 `node.exe` 放到 `Flyleaf.exe` 旁边即可。
+> 主窗口点关闭会缩进托盘；托盘菜单「退出」才结束进程。随记卡 `Ctrl+Alt+Space`，`Ctrl+Enter` 归档。
 > 若 Electron 二进制下载失败，设置 `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/` 后执行 `npm rebuild electron`。
 
 ## 常用命令
@@ -80,7 +91,7 @@ core/src/
   app/             用例：Note / Framework / Capture / Search / Asset / Vault
   infra/           fs / 内存索引 / chokidar / JSON 配置 / 每日 inbox
   api/             Fastify 路由（web 壳用）
-  client/          HTTP 与 IPC 两个传输，返回同一个 YanClient
+  client/          HTTP 与 IPC 两个传输，返回同一个客户端
   host.ts          当前 vault 的持有者，两个壳共用
   core.ts          唯一装配点
 apps/web/          Vite + React 主界面
@@ -92,9 +103,9 @@ ui/                设计 token 与共享常量
 
 ## 还没做
 
-- 桌面壳的真机验证（见下）
 - 导图在 500 节点以上的虚拟化
 - Electron 内的 `printToPDF`（目前走系统打印对话框）
+- 轻量壳自带 Node 的单文件分发（现在依赖本机 Node，或手动把 `node.exe` 放在旁边）
 
 ## 已知限制
 

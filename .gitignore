@@ -12,3 +12,4 @@ coverage/
 shots/
 spike-result.json
 release/
+shell/lite/.sdk/

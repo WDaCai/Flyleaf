@@ -53,6 +53,11 @@ export function createHttpClient(opts: HttpClientOptions = {}): YanClient {
       info: () => request(base, 'GET', '/api/v1/vault'),
       tree: () => request(base, 'GET', '/api/v1/vault/tree'),
       recent: (limit) => request(base, 'GET', `/api/v1/vault/recent${qs({ limit })}`),
+      listFolders: () => request(base, 'GET', '/api/v1/vault/folders'),
+      createFolder: (input) => request(base, 'POST', '/api/v1/vault/folders', input),
+      renameFolder: (input) => request(base, 'POST', '/api/v1/vault/folders/rename', input),
+      deleteFolder: (input) => request(base, 'POST', '/api/v1/vault/folders/delete', input),
+      setInbox: (path) => request(base, 'POST', '/api/v1/vault/folders/inbox', { path }),
     },
     notes: {
       read: (path) => request(base, 'GET', `/api/v1/note${qs({ path })}`),
@@ -62,6 +67,8 @@ export function createHttpClient(opts: HttpClientOptions = {}): YanClient {
       rename: async (from, to) => {
         await request(base, 'POST', '/api/v1/note/rename', { from, to });
       },
+      delete: (input) =>
+        request(base, 'POST', '/api/v1/note/delete', typeof input === 'string' ? { path: input } : input),
       backlinks: (path) => request(base, 'GET', `/api/v1/backlinks${qs({ path })}`),
     },
     search: {

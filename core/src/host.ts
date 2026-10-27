@@ -46,12 +46,18 @@ export class CoreHost {
         info: () => c().vault.info(),
         tree: () => c().vault.tree(),
         recent: (limit) => c().vault.recent(limit),
+        listFolders: () => c().vault.listFolders(),
+        createFolder: (input) => c().vault.createFolder(input),
+        renameFolder: (input) => c().vault.renameFolder(input),
+        deleteFolder: (input) => c().vault.deleteFolder(input),
+        setInbox: (path) => c().vault.setInbox(path),
       },
       notes: {
         read: (p) => c().notes.read(p),
         write: (p, body, fm, mtime) => c().notes.write(p, body, fm, mtime),
         create: (input) => c().notes.create(input),
         rename: (from, to) => c().notes.rename(from, to),
+        delete: (input) => c().notes.delete(input),
         backlinks: (p) => c().notes.backlinks(p),
       },
       search: {

@@ -94,6 +94,68 @@ export class FsNoteRepo implements NoteRepo {
     await fs.rename(src, dst);
   }
 
+
+  async listTopDirs(): Promise<string[]> {
+    let entries;
+    try {
+      entries = await fs.readdir(this.rootAbs, { withFileTypes: true });
+    } catch {
+      return [];
+    }
+    const out: string[] = [];
+    for (const e of entries) {
+      if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith('.')) continue;
+      out.push(e.name);
+    }
+    return out.sort();
+  }
+
+  async dirExists(rel: string): Promise<boolean> {
+    try {
+      const st = await fs.stat(this.abs(rel));
+      return st.isDirectory();
+    } catch {
+      return false;
+    }
+  }
+
+  async isDirEmpty(rel: string): Promise<boolean> {
+    const abs = this.abs(rel);
+    let entries;
+    try {
+      entries = await fs.readdir(abs);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') return true;
+      throw e;
+    }
+    return entries.length === 0;
+  }
+
+  async mkdir(rel: string): Promise<void> {
+    await fs.mkdir(this.abs(rel), { recursive: true });
+  }
+
+  async rmdir(rel: string, opts?: { recursive?: boolean }): Promise<void> {
+    const abs = this.abs(rel);
+    if (opts?.recursive) {
+      await fs.rm(abs, { recursive: true, force: true });
+      return;
+    }
+    try {
+      await fs.rmdir(abs);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw e;
+    }
+  }
+
+  async renameDir(from: string, to: string): Promise<void> {
+    const src = this.abs(from);
+    const dst = this.abs(to);
+    await fs.mkdir(path.dirname(dst), { recursive: true });
+    await fs.rename(src, dst);
+  }
+
   async listMarkdown(): Promise<string[]> {
     return this.walk((name) => name.endsWith('.md'));
   }

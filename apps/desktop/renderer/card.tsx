@@ -1,14 +1,32 @@
+import '@flyleaf/ui/tokens.css';
 import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createIpcClient, type IpcBridge } from '@yan/core/client';
+import { createIpcClient, type IpcBridge } from '@flyleaf/core/client';
 import './card.css';
 
-interface YanBridge extends IpcBridge {
+const THEME_KEY = 'flyleaf-theme';
+
+function applyStoredTheme(): void {
+  let theme = 'dark';
+  try {
+    const v = localStorage.getItem(THEME_KEY);
+    if (v === 'light' || v === 'dark') theme = v;
+    else if (window.matchMedia?.('(prefers-color-scheme: light)').matches) theme = 'light';
+  } catch {
+    /* ignore */
+  }
+  document.documentElement.setAttribute('data-theme', theme);
+}
+
+applyStoredTheme();
+
+
+interface FlyleafBridge extends IpcBridge {
   invokeChannel: string;
   eventChannel: string;
 }
 
-const bridge = (window as unknown as { yan: YanBridge }).yan;
+const bridge = (window as unknown as { flyleaf: FlyleafBridge }).flyleaf;
 const client = createIpcClient(bridge);
 
 function nowTime(): string {

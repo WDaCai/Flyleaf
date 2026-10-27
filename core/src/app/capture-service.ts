@@ -2,6 +2,7 @@ import type { CaptureArchiveResult, CaptureDraft } from '../contracts';
 import type { CaptureSink, NoteRepo } from '../ports';
 import type { EventBus } from './event-bus';
 
+// `.yan`：历史目录名，兼容保留
 const SCRATCH_REL = '.yan/scratch/card.json';
 
 export class CaptureService {
@@ -49,7 +50,7 @@ export class CaptureService {
       SCRATCH_REL,
       `${JSON.stringify({ text: '', updatedAt: at.toISOString(), archivedCount: current.archivedCount + 1 })}\n`,
     );
-    this.events.emit({ type: 'capture:saved', at: at.toISOString() });
+    this.events.emit({ type: 'capture:saved', at: at.toISOString(), file: result.file, line: result.line });
     return result;
   }
 }

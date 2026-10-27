@@ -11,39 +11,50 @@ import {
 } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
-import { bracketMatching, indentOnInput, syntaxHighlighting } from '@codemirror/language';
+import { bracketMatching, defaultHighlightStyle, indentOnInput, syntaxHighlighting } from '@codemirror/language';
 import { oneDarkHighlightStyle } from '@codemirror/theme-one-dark';
+
+export type UiTheme = 'dark' | 'light';
 
 export interface EditorProps {
   /** 切换文件时变化，用于重建编辑器 */
   docKey: string;
   value: string;
   onChange: (body: string) => void;
+  /** 主界面主题：驱动编辑器浅/深色 */
+  uiTheme?: UiTheme;
 }
 
-const theme = EditorView.theme(
-  {
-    '&': { backgroundColor: 'transparent', color: '#d7dbe0', height: '100%', fontSize: '14px' },
-    '.cm-scroller': { fontFamily: 'var(--mono)', lineHeight: '1.6', overflow: 'auto' },
-    '.cm-content': { padding: '18px 0', caretColor: '#7aa2f7' },
-    '.cm-gutters': {
-      backgroundColor: 'transparent',
-      color: '#454e5c',
-      border: 'none',
-      paddingRight: '6px',
-      userSelect: 'none',
+function buildTheme(dark: boolean) {
+  return EditorView.theme(
+    {
+      '&': {
+        backgroundColor: 'transparent',
+        color: 'var(--editor-fg)',
+        height: '100%',
+        fontSize: '14px',
+      },
+      '.cm-scroller': { fontFamily: 'var(--mono)', lineHeight: '1.65', overflow: 'auto' },
+      '.cm-content': { padding: '20px 0', caretColor: 'var(--editor-caret)' },
+      '.cm-gutters': {
+        backgroundColor: 'transparent',
+        color: 'var(--editor-gutter)',
+        border: 'none',
+        paddingRight: '8px',
+        userSelect: 'none',
+      },
+      '.cm-activeLine': { backgroundColor: 'var(--editor-active-line)' },
+      '.cm-activeLineGutter': { backgroundColor: 'transparent', color: 'var(--editor-gutter-active)' },
+      '.cm-selectionBackground, ::selection': { backgroundColor: 'var(--editor-selection) !important' },
+      '.cm-cursor': { borderLeftColor: 'var(--editor-caret)', borderLeftWidth: '2px' },
+      '.cm-placeholder': { color: 'var(--editor-placeholder)' },
+      '.cm-line': { padding: '0 20px' },
     },
-    '.cm-activeLine': { backgroundColor: 'rgba(122,162,247,0.045)' },
-    '.cm-activeLineGutter': { backgroundColor: 'transparent', color: '#8a93a0' },
-    '.cm-selectionBackground, ::selection': { backgroundColor: 'rgba(122,162,247,0.22) !important' },
-    '.cm-cursor': { borderLeftColor: '#7aa2f7', borderLeftWidth: '2px' },
-    '.cm-placeholder': { color: '#454e5c' },
-    '.cm-line': { padding: '0 18px' },
-  },
-  { dark: true },
-);
+    { dark },
+  );
+}
 
-export function Editor({ docKey, value, onChange }: EditorProps): React.ReactElement {
+export function Editor({ docKey, value, onChange, uiTheme = 'dark' }: EditorProps): React.ReactElement {
   const host = useRef<HTMLDivElement | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
@@ -52,6 +63,7 @@ export function Editor({ docKey, value, onChange }: EditorProps): React.ReactEle
     const el = host.current;
     if (!el) return;
 
+    const dark = uiTheme !== 'light';
     const view = new EditorView({
       parent: el,
       state: EditorState.create({
@@ -65,14 +77,14 @@ export function Editor({ docKey, value, onChange }: EditorProps): React.ReactEle
           bracketMatching(),
           indentOnInput(),
           markdown(),
-          syntaxHighlighting(oneDarkHighlightStyle),
+          syntaxHighlighting(dark ? oneDarkHighlightStyle : defaultHighlightStyle),
           EditorView.lineWrapping,
           placeholder('开始写……'),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           EditorView.updateListener.of((u) => {
             if (u.docChanged) onChangeRef.current(u.state.doc.toString());
           }),
-          theme,
+          buildTheme(dark),
         ],
       }),
     });
@@ -82,9 +94,9 @@ export function Editor({ docKey, value, onChange }: EditorProps): React.ReactEle
     return () => {
       view.destroy();
     };
-    // 只在切文件时重建；value 的后续变化由父层忽略
+    // 切文件或主题时重建；value 的后续变化由父层忽略
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [docKey]);
+  }, [docKey, uiTheme]);
 
   return <div className="editor-host" ref={host} />;
 }

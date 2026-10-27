@@ -1,5 +1,5 @@
 // API 冒烟测试：用 Node 原生 fetch，确保 UTF-8 正确
-const BASE = process.env.YAN_API ?? 'http://127.0.0.1:5174/api/v1';
+const BASE = process.env.FLYLEAF_API ?? process.env.YAN_API ?? 'http://127.0.0.1:5174/api/v1';
 
 let pass = 0;
 let fail = 0;

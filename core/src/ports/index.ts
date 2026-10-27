@@ -23,6 +23,13 @@ export interface NoteRepo {
   listMarkdown(): Promise<string[]>;
   /** 所有目录（posix 相对路径），用于文件树 */
   listDirs(): Promise<string[]>;
+  /** 仅顶层非隐藏目录名 */
+  listTopDirs(): Promise<string[]>;
+  dirExists(rel: string): Promise<boolean>;
+  isDirEmpty(rel: string): Promise<boolean>;
+  mkdir(rel: string): Promise<void>;
+  rmdir(rel: string, opts?: { recursive?: boolean }): Promise<void>;
+  renameDir(from: string, to: string): Promise<void>;
   stat(rel: string): Promise<number | null>;
 }
 

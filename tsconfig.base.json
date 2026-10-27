@@ -13,10 +13,10 @@
     "jsx": "react-jsx",
     "verbatimModuleSyntax": false,
     "paths": {
-      "@yan/core": ["./core/src/index.ts"],
-      "@yan/core/contracts": ["./core/src/contracts.ts"],
-      "@yan/core/client": ["./core/src/client/index.ts"],
-      "@yan/ui": ["./ui/src/index.ts"]
+      "@flyleaf/core": ["./core/src/index.ts"],
+      "@flyleaf/core/contracts": ["./core/src/contracts.ts"],
+      "@flyleaf/core/client": ["./core/src/client/index.ts"],
+      "@flyleaf/ui": ["./ui/src/index.ts"]
     }
   }
 }

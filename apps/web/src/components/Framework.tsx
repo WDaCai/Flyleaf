@@ -1,6 +1,6 @@
-import type { FrameworkTree, Mastery, NavTarget, TreeNode } from '@yan/core/contracts';
-import { MASTERY_LABEL, MASTERY_ORDER } from '@yan/core/contracts';
-import { STATE_GLYPH } from '@yan/ui';
+import type { FrameworkTree, Mastery, NavTarget, TreeNode } from '@flyleaf/core/contracts';
+import { MASTERY_LABEL, MASTERY_ORDER } from '@flyleaf/core/contracts';
+import { STATE_GLYPH } from '@flyleaf/ui';
 import { MindMap } from './MindMap';
 
 export interface FrameworkProps {
@@ -46,10 +46,11 @@ export function Framework({
             {done}/{framework.stats.total} · {pct}%
           </span>
         </div>
-        <div className="fw-legend">
+        <div className="fw-legend" title="状态图例：未学 / 在学 / 已懂 / 用过">
           {MASTERY_ORDER.map((s) => (
             <span key={s} className={`fw-legend-item state-${s}`} title={MASTERY_LABEL[s]}>
-              {STATE_GLYPH[s]} {framework.stats[s]}
+              {STATE_GLYPH[s]} {MASTERY_LABEL[s]}
+              <span className="fw-legend-count">{framework.stats[s]}</span>
             </span>
           ))}
         </div>

@@ -3,14 +3,17 @@ import path from 'node:path';
 import { appendCapture, formatDate } from '../domain/capture';
 import type { CaptureSink, NoteRepo } from '../ports';
 
+export type InboxDirProvider = () => string | Promise<string>;
+
 export class DailyInboxSink implements CaptureSink {
   constructor(
     private readonly repo: NoteRepo,
-    private readonly dir = '00-inbox',
+    private readonly getInbox: InboxDirProvider = () => '00-inbox',
   ) {}
 
   async append(text: string, at: Date): Promise<{ file: string; line: number }> {
-    const file = `${this.dir}/${formatDate(at)}.md`;
+    const dir = await this.getInbox();
+    const file = `${dir}/${formatDate(at)}.md`;
     let existing = '';
     try {
       existing = (await this.repo.read(file)).raw;

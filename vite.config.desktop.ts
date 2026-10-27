@@ -11,11 +11,11 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: [
-      { find: /^@yan\/ui\/tokens\.css$/, replacement: r('./ui/src/tokens.css') },
-      { find: /^@yan\/core\/contracts$/, replacement: r('./core/src/contracts.ts') },
-      { find: /^@yan\/core\/client$/, replacement: r('./core/src/client/index.ts') },
-      { find: /^@yan\/core$/, replacement: r('./core/src/index.ts') },
-      { find: /^@yan\/ui$/, replacement: r('./ui/src/index.ts') },
+      { find: /^@flyleaf\/ui\/tokens\.css$/, replacement: r('./ui/src/tokens.css') },
+      { find: /^@flyleaf\/core\/contracts$/, replacement: r('./core/src/contracts.ts') },
+      { find: /^@flyleaf\/core\/client$/, replacement: r('./core/src/client/index.ts') },
+      { find: /^@flyleaf\/core$/, replacement: r('./core/src/index.ts') },
+      { find: /^@flyleaf\/ui$/, replacement: r('./ui/src/index.ts') },
     ],
   },
   build: {

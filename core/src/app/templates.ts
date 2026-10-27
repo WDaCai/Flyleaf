@@ -33,7 +33,7 @@ export const VAULT_DIRS = [
   '50-frameworks',
   '50-frameworks/nodes',
   'assets',
-  '.yan',
+  '.yan', // 历史目录名，兼容保留
   '.yan/templates',
   '.yan/scratch',
   '.yan/ui',
