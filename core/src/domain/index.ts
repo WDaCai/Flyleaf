@@ -23,3 +23,12 @@ export {
   canDeleteFolder,
   pickNextInbox,
 } from './folders';
+export {
+  canvasPathForFramework,
+  emptyCanvasDoc,
+  parseCanvasJson,
+  serializeCanvasDoc,
+  reconcileCanvas,
+  ghostLayouts,
+  CANVAS_DEFAULT_SIZE,
+} from './canvas';

@@ -12,6 +12,12 @@ export interface BuildTreeOptions {
   linkedCount: (nodeText: string) => number;
 }
 
+/**
+ * 稳定 id：
+ * - 根：fnv1a(path|root)
+ * - 已挂独立笔记：note:<resolvedPath>
+ * - 否则：fnv1a(path|parentId|text|sameTextSiblingIndex) —— 忌纯行号
+ */
 export function buildTree(opts: BuildTreeOptions): FrameworkTree {
   const { path, title, nodes } = opts;
 
@@ -27,7 +33,6 @@ export function buildTree(opts: BuildTreeOptions): FrameworkTree {
   };
 
   const stats: FrameworkStats = { todo: 0, learning: 0, known: 0, used: 0, total: 0 };
-  // stack[d] = 最近一个 depth 为 d 的节点；root 占据 depth -1 的槽位
   const stack: TreeNode[] = [root];
 
   for (const n of nodes) {
@@ -43,8 +48,16 @@ export function buildTree(opts: BuildTreeOptions): FrameworkTree {
       ? { kind: 'file', path: resolved }
       : { kind: 'line', path, line: n.line };
 
+    const sameTextIndex = parent.children.filter((c) => c.text === n.text).length;
+    let id: string;
+    if (resolved && resolved !== path) {
+      id = `note:${resolved}`;
+    } else {
+      id = fnv1a(`${path}|${parent.id}|${n.text}|${sameTextIndex}`);
+    }
+
     const node: TreeNode = {
-      id: fnv1a(`${path}|${n.line}|${n.text}`),
+      id,
       text: n.text,
       depth,
       state: n.state,
@@ -81,6 +94,16 @@ export function findNodeByLine(root: TreeNode, line: number): TreeNode | null {
   if (root.line === line) return root;
   for (const c of root.children) {
     const hit = findNodeByLine(c, line);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/** 按稳定 id 查找 */
+export function findNodeById(root: TreeNode, id: string): TreeNode | null {
+  if (root.id === id) return root;
+  for (const c of root.children) {
+    const hit = findNodeById(c, id);
     if (hit) return hit;
   }
   return null;

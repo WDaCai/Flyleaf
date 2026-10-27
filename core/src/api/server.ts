@@ -190,6 +190,19 @@ export function createServer(host: CoreHost, opts: ServerOptions = {}): FastifyI
     return guard(() => host.client.framework.shiftNode(str(body.path, 'path'), Number(body.line), delta));
   });
 
+
+  app.get('/api/v1/framework/canvas', async (req) => {
+    const q = (req.query ?? {}) as Body;
+    return guard(() => host.client.framework.getCanvas(str(q.path, 'path')));
+  });
+
+  app.put('/api/v1/framework/canvas', async (req) => {
+    const body = (req.body ?? {}) as Body;
+    return guard(() =>
+      host.client.framework.saveCanvas(str(body.path, 'path'), body.doc as Parameters<typeof host.client.framework.saveCanvas>[1]),
+    );
+  });
+
   app.get('/api/v1/capture/draft', async () => guard(() => host.client.capture.getDraft()));
 
   app.put('/api/v1/capture/draft', async (req) => {

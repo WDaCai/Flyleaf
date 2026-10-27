@@ -50,6 +50,8 @@ export function createIpcClient(bridge: IpcBridge): YanClient {
       renameNode: (path, line, text) => call('framework.renameNode', path, line, text),
       removeNode: (path, line, opts) => call('framework.removeNode', path, line, opts),
       shiftNode: (path, line, delta) => call('framework.shiftNode', path, line, delta),
+      getCanvas: (path) => call('framework.getCanvas', path),
+      saveCanvas: (path, doc) => call('framework.saveCanvas', path, doc),
     },
     capture: {
       getDraft: () => call('capture.getDraft'),

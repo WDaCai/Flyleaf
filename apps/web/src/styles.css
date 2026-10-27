@@ -1330,3 +1330,60 @@
   line-height: 16px;
   flex: none;
 }
+
+
+/* —— 自由画布（bound）增量 —— */
+.fc-toolbar .icon-btn.is-on {
+  background: var(--bg-hover, rgba(127, 127, 127, 0.18));
+  color: var(--text);
+}
+.fc-sel-box {
+  stroke: var(--text-dim, #888);
+  stroke-width: 1;
+  stroke-dasharray: none;
+  opacity: 0.85;
+}
+.fc-handle {
+  fill: var(--bg, #1e1e1e);
+  stroke: var(--text-dim, #888);
+  stroke-width: 1;
+  cursor: nwse-resize;
+}
+.fc-handle[data-handle='ne'],
+.fc-handle[data-handle='sw'] {
+  cursor: nesw-resize;
+}
+.fc-edge-handle {
+  fill: var(--bg, #1e1e1e);
+  stroke: var(--text-dim, #888);
+  stroke-width: 1;
+  opacity: 0;
+  pointer-events: all;
+  cursor: pointer;
+}
+.fc-edge:hover .fc-edge-handle,
+.fc-edge.is-selected .fc-edge-handle {
+  opacity: 0.9;
+}
+.fc-free-link {
+  stroke: var(--mm-link, #888);
+  cursor: pointer;
+}
+.fc-tree-link {
+  opacity: 0.85;
+  pointer-events: none;
+}
+.fc-draft-link {
+  stroke: var(--text-dim, #888);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  fill: none;
+  pointer-events: none;
+}
+.mm-node.is-ghost .mm-node-body {
+  stroke-dasharray: 4 3;
+  opacity: 0.55;
+}
+.mm-node.is-ghost .mm-label {
+  fill: var(--text-dim, #888);
+}

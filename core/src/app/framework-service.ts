@@ -6,6 +6,14 @@ import { replaceStateMarker } from '../domain/state';
 import { splitDocument } from '../domain/text';
 import { parseOutline } from '../domain/outline';
 import { buildTree, flattenTree, findNodeByLine } from '../domain/tree';
+import {
+  canvasPathForFramework,
+  emptyCanvasDoc,
+  parseCanvasJson,
+  serializeCanvasDoc,
+  type FrameworkCanvasDoc,
+  type CanvasLoadResult,
+} from '../domain/canvas';
 import { resolveTargetName } from '../domain/wikilink';
 import { BadRequestError, NotFoundError } from '../errors';
 import type { IndexProvider, NoteRepo } from '../ports';
@@ -276,6 +284,37 @@ export class FrameworkService {
     await this.repo.write(rel, lines.join(eol));
     this.events.emit({ type: 'note:changed', path: rel });
     return this.tree(rel);
+  }
+
+
+  async getCanvas(rel: string): Promise<CanvasLoadResult> {
+    const side = canvasPathForFramework(rel);
+    if (!(await this.repo.exists(side))) {
+      return { degraded: true, doc: null, reason: 'missing' };
+    }
+    try {
+      const raw = await this.repo.read(side);
+      return parseCanvasJson(raw.raw, rel);
+    } catch {
+      return { degraded: true, doc: null, reason: 'read-error' };
+    }
+  }
+
+  async saveCanvas(rel: string, doc: FrameworkCanvasDoc): Promise<FrameworkCanvasDoc> {
+    if (!doc || doc.version !== 1) throw new BadRequestError('画布 version 必须为 1');
+    const side = canvasPathForFramework(rel);
+    const normalized: FrameworkCanvasDoc = {
+      ...emptyCanvasDoc(rel),
+      ...doc,
+      version: 1,
+      mode: doc.mode === 'scratch' ? 'scratch' : 'bound',
+      frameworkPath: rel.replace(/\\/g, '/'),
+      nodes: Array.isArray(doc.nodes) ? doc.nodes : [],
+      edges: Array.isArray(doc.edges) ? doc.edges.filter((e) => e.kind === 'link') : [],
+    };
+    await this.repo.write(side, serializeCanvasDoc(normalized));
+    this.events.emit({ type: 'note:changed', path: side });
+    return normalized;
   }
 
   /** 把 wikilink 目标解析成相对路径：同目录优先 → 全库唯一 → 否则不可解 */

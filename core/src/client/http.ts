@@ -92,6 +92,8 @@ export function createHttpClient(opts: HttpClientOptions = {}): YanClient {
       removeNode: (path, line, opts) =>
         request(base, 'POST', '/api/v1/framework/remove', { path, line, trashLinked: opts?.trashLinked }),
       shiftNode: (path, line, delta) => request(base, 'POST', '/api/v1/framework/shift', { path, line, delta }),
+      getCanvas: (path) => request(base, 'GET', `/api/v1/framework/canvas${qs({ path })}`),
+      saveCanvas: (path, doc) => request(base, 'PUT', '/api/v1/framework/canvas', { path, doc }),
     },
     capture: {
       getDraft: () => request(base, 'GET', '/api/v1/capture/draft'),

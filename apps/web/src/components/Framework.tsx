@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react';
 import type { FrameworkTree, Mastery, NavTarget, TreeNode } from '@flyleaf/core/contracts';
 import { MASTERY_LABEL, MASTERY_ORDER } from '@flyleaf/core/contracts';
 import { STATE_GLYPH } from '@flyleaf/ui';
-import { MindMap } from './MindMap';
+import { FrameworkCanvas } from './FrameworkCanvas';
+import type { FrameworkCanvasDoc, FrameworkCanvasLoadResult } from '@flyleaf/core/contracts';
 
 export interface FrameworkProps {
   framework: FrameworkTree;
@@ -19,6 +20,8 @@ export interface FrameworkProps {
   onToggle: (id: string) => void;
   highlightLine: number | null;
   onSelectLine: (line: number | null) => void;
+  loadCanvas: (path: string) => Promise<FrameworkCanvasLoadResult>;
+  saveCanvas: (path: string, doc: FrameworkCanvasDoc) => Promise<FrameworkCanvasDoc>;
 }
 
 function nextState(state: Mastery): Mastery {
@@ -41,6 +44,8 @@ export function Framework({
   onToggle,
   highlightLine,
   onSelectLine,
+  loadCanvas,
+  saveCanvas,
 }: FrameworkProps): React.ReactElement {
   const done = framework.stats.known + framework.stats.used;
   const pct = framework.stats.total ? Math.round((done / framework.stats.total) * 100) : 0;
@@ -117,13 +122,15 @@ export function Framework({
           />
         </div>
       ) : (
-        <MindMap
+        <FrameworkCanvas
           framework={framework}
           collapsed={collapsed}
           onToggle={onToggle}
           onNavigate={onNavigate}
           highlightLine={highlightLine}
           onSelectLine={onSelectLine}
+          loadCanvas={loadCanvas}
+          saveCanvas={saveCanvas}
         />
       )}
     </div>

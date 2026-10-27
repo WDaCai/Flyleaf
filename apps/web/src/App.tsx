@@ -1437,6 +1437,8 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
               onToggle={toggleCollapse}
               highlightLine={highlightLine}
               onSelectLine={setHighlightLine}
+              loadCanvas={(path) => client.framework.getCanvas(path)}
+              saveCanvas={(path, doc) => client.framework.saveCanvas(path, doc)}
             />
           )}
 

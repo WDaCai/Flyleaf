@@ -35,7 +35,7 @@ export type NavTarget =
   | { kind: 'line'; path: string; line: number };
 
 export interface TreeNode {
-  /** 稳定 id：由 path + 行号 + 原文哈希得到，供 UI 折叠状态持久化 */
+  /** 稳定 id：优先 note:<path>；否则 fnv(parentId|text|siblingIndex)，忌纯行号 */
   id: string;
   text: string;
   depth: number;
@@ -254,6 +254,52 @@ export const DEFAULT_CONFIG: AppConfig = {
   tabs: { max: 8 },
 };
 
+
+/** 画布节点形状（自由画布） */
+export type CanvasShape = 'round' | 'rect' | 'ellipse';
+
+/** bound=框架 md 旁路；scratch=纯梳理独立文件 */
+export type CanvasMode = 'bound' | 'scratch';
+
+export interface FrameworkCanvasViewport {
+  k: number;
+  tx: number;
+  ty: number;
+}
+
+export interface FrameworkCanvasNode {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  shape: CanvasShape;
+}
+
+export interface FrameworkCanvasEdge {
+  id: string;
+  kind: 'link';
+  from: string;
+  to: string;
+  arrow?: boolean;
+}
+
+/** 旁路 foo.canvas.json */
+export interface FrameworkCanvasDoc {
+  version: 1;
+  mode: CanvasMode;
+  frameworkPath: string;
+  viewport: FrameworkCanvasViewport;
+  nodes: FrameworkCanvasNode[];
+  edges: FrameworkCanvasEdge[];
+}
+
+export interface FrameworkCanvasLoadResult {
+  degraded: boolean;
+  doc: FrameworkCanvasDoc | null;
+  reason?: string;
+}
+
 export type YanEvent =
   | { type: 'note:changed'; path: string }
   | { type: 'vault:changed'; paths: string[] }
@@ -303,6 +349,8 @@ export interface YanClient {
       opts?: { trashLinked?: boolean },
     ): Promise<{ tree: FrameworkTree; trashed: string[] }>;
     shiftNode(path: string, line: number, delta: -1 | 1): Promise<FrameworkTree>;
+    getCanvas(path: string): Promise<FrameworkCanvasLoadResult>;
+    saveCanvas(path: string, doc: FrameworkCanvasDoc): Promise<FrameworkCanvasDoc>;
   };
   capture: {
     getDraft(): Promise<CaptureDraft>;

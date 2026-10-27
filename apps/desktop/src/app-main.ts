@@ -195,6 +195,13 @@ async function dispatch(method: string, args: unknown[]): Promise<unknown> {
       );
     case 'framework.shiftNode':
       return c.framework.shiftNode(String(args[0]), Number(args[1]), Number(args[2]) < 0 ? -1 : 1);
+    case 'framework.getCanvas':
+      return c.framework.getCanvas(String(args[0]));
+    case 'framework.saveCanvas':
+      return c.framework.saveCanvas(
+        String(args[0]),
+        args[1] as Parameters<typeof c.framework.saveCanvas>[1],
+      );
     case 'capture.getDraft':
       return c.capture.getDraft();
     case 'capture.saveDraft':

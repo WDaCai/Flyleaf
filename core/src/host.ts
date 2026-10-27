@@ -74,6 +74,8 @@ export class CoreHost {
         renameNode: (p, line, text) => c().framework.renameNode(p, line, text),
         removeNode: (p, line, opts) => c().framework.removeNode(p, line, opts),
         shiftNode: (p, line, delta) => c().framework.shiftNode(p, line, delta),
+        getCanvas: (p) => c().framework.getCanvas(p),
+        saveCanvas: (p, doc) => c().framework.saveCanvas(p, doc),
       },
       capture: {
         getDraft: () => c().capture.getDraft(),
