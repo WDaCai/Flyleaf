@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@yan/ui/tokens.css';
 import './styles.css';
+import './present.css';
 import { App } from './App';
 import { createHttpClient } from '@yan/core/client';
 

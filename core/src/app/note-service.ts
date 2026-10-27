@@ -61,7 +61,15 @@ export class NoteService {
     if (body === split.body && !fmChanged) {
       return this.read(rel);
     }
-    const fm = { ...parseFrontmatter(split.frontmatterRaw), ...(fmPatch ?? {}) };
+    const fm = { ...parseFrontmatter(split.frontmatterRaw) };
+    // 空值视为「删除该字段」，避免写出 project: null 这种噪音
+    for (const [k, v] of Object.entries(fmPatch ?? {})) {
+      if (v === undefined || v === null || (Array.isArray(v) && v.length === 0) || v === '') {
+        delete fm[k];
+      } else {
+        fm[k] = v;
+      }
+    }
     fm.updated = this.now().toISOString();
     const composed = composeDocument(split.bom, split.eol, fm, body);
     await this.repo.write(rel, composed, expectMtimeMs);

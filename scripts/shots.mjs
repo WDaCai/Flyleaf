@@ -69,5 +69,22 @@ await page.evaluate(() => {
 await new Promise((r) => setTimeout(r, 400));
 await page.screenshot({ path: path.join(OUT, '06-palette.png') });
 
+// 实验笔记（对比图 + 属性面板）
+await page.keyboard.press('Escape');
+await new Promise((r) => setTimeout(r, 200));
+await page.evaluate(() => {
+  const row = [...document.querySelectorAll('.tree-row.file')].find((el) => el.textContent?.includes('LOD'));
+  row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+});
+await new Promise((r) => setTimeout(r, 900));
+await page.screenshot({ path: path.join(OUT, '07-experiment.png') });
+
+// 呈现模式
+await page.evaluate(() => {
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', ctrlKey: true, shiftKey: true, bubbles: true }));
+});
+await new Promise((r) => setTimeout(r, 700));
+await page.screenshot({ path: path.join(OUT, '08-present.png') });
+
 console.log(JSON.stringify({ openedFramework: opened, mindmap: mind, errors }, null, 2));
 await browser.close();

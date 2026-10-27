@@ -11,9 +11,12 @@ import type {
   YanClient,
 } from '@yan/core/contracts';
 import { Editor } from './components/Editor';
+import { ExperimentChart } from './components/ExperimentChart';
+import { MetaPanel } from './components/MetaPanel';
 import { Framework } from './components/Framework';
 import { Palette, type PaletteItem } from './components/Palette';
 import { renderMarkdown, WIKI_PREFIX } from './markdown';
+import { toPng } from 'html-to-image';
 
 interface Tab {
   path: string;
@@ -69,6 +72,7 @@ export function App({ client }: { client: YanClient }): React.ReactElement {
   const [backlinks, setBacklinks] = useState<Backlink[]>([]);
   const [status, setStatus] = useState('就绪');
   const [palette, setPalette] = useState<'command' | 'search' | null>(null);
+  const [present, setPresent] = useState(false);
 
   const docRef = useRef<NoteDoc | null>(null);
   const bodyRef = useRef('');
@@ -212,6 +216,49 @@ export function App({ client }: { client: YanClient }): React.ReactElement {
     });
   }, []);
 
+  /** 属性面板保存：连同当前正文一起提交，避免丢字 */
+  const saveMeta = useCallback(
+    async (patch: Record<string, unknown>): Promise<void> => {
+      const d = docRef.current;
+      if (!d) return;
+      try {
+        const clean: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(patch)) {
+          clean[k] = v === undefined ? null : v;
+        }
+        const next = await client.notes.write(d.path, bodyRef.current, clean, d.mtimeMs);
+        docRef.current = next;
+        setDoc(next);
+        pendingRef.current = null;
+        setStatus('属性已保存');
+      } catch (e) {
+        setStatus(`属性保存失败：${String(e)}`);
+      }
+    },
+    [client],
+  );
+
+  const exportPng = useCallback(async (): Promise<void> => {
+    const el = document.querySelector('.present-paper') as HTMLElement | null;
+    if (!el) return;
+    try {
+      const dataUrl = await toPng(el, { backgroundColor: '#fafaf8', pixelRatio: 2, cacheBust: true });
+      const blob = await (await fetch(dataUrl)).blob();
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        setStatus('已复制图片到剪贴板');
+      } catch {
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = `${(doc?.path ?? 'note').split('/').pop()?.replace(/\.md$/, '') ?? 'note'}.png`;
+        a.click();
+        setStatus('浏览器不允许直接写剪贴板，已下载 PNG');
+      }
+    } catch (e) {
+      setStatus(`导出失败：${String(e)}`);
+    }
+  }, [doc]);
+
   // 初始化
   useEffect(() => {
     void (async () => {
@@ -238,14 +285,20 @@ export function App({ client }: { client: YanClient }): React.ReactElement {
   // 快捷键
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape' && present) {
+        setPresent(false);
+        return;
+      }
       const mod = e.ctrlKey || e.metaKey;
       if (!mod) return;
-      if (e.key.toLowerCase() === 'p' && !e.shiftKey) {
+      if (e.key.toLowerCase() === 'p' && e.shiftKey) {
+        e.preventDefault();
+        setPresent((p) => !p);
+        setMode('preview');
+        setBody(bodyRef.current);
+      } else if (e.key.toLowerCase() === 'p') {
         e.preventDefault();
         setPalette('command');
-      } else if (e.key.toLowerCase() === 'p' && e.shiftKey) {
-        e.preventDefault();
-        setPalette('search');
       } else if (e.key.toLowerCase() === 'f' && e.shiftKey) {
         e.preventDefault();
         setPalette('search');
@@ -260,7 +313,7 @@ export function App({ client }: { client: YanClient }): React.ReactElement {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [present]);
 
   const openVault = async (): Promise<void> => {
     if (!vaultInput.trim()) return;
@@ -334,9 +387,10 @@ export function App({ client }: { client: YanClient }): React.ReactElement {
   }
 
   const isFramework = framework !== null && doc !== null && String(doc.frontmatter.type) === 'framework';
+  const isExperiment = doc !== null && String(doc.frontmatter.type) === 'experiment';
 
   return (
-    <div className="app">
+    <div className={`app ${present ? 'present' : ''}`}>
       <aside className="sidebar">
         <div className="sidebar-head">
           <span className="brand">砚</span>
@@ -430,30 +484,41 @@ export function App({ client }: { client: YanClient }): React.ReactElement {
           )}
 
           {doc && !isFramework && mode === 'edit' && (
-            <Editor docKey={doc.path} value={bodyRef.current} onChange={onBodyChange} />
+            <div className="doc-wrap">
+              {isExperiment && <ExperimentChart body={bodyRef.current} />}
+              <div className="doc-main">
+                <Editor docKey={doc.path} value={bodyRef.current} onChange={onBodyChange} />
+              </div>
+            </div>
           )}
 
           {doc && !isFramework && mode === 'preview' && (
-            <div
-              className="preview"
-              onClick={(e) => {
-                const a = (e.target as HTMLElement).closest('a');
-                if (!a) return;
-                const href = a.getAttribute('href') ?? '';
-                if (href.startsWith(WIKI_PREFIX)) {
-                  e.preventDefault();
-                  const name = decodeURIComponent(href.slice(WIKI_PREFIX.length));
-                  void openByName(name);
-                }
-              }}
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(body) }}
-            />
+            <div className="doc-wrap">
+              {isExperiment && <ExperimentChart body={body} />}
+              <div className="doc-main">
+                <div
+                  className="preview"
+                  onClick={(e) => {
+                    const a = (e.target as HTMLElement).closest('a');
+                    if (!a) return;
+                    const href = a.getAttribute('href') ?? '';
+                    if (href.startsWith(WIKI_PREFIX)) {
+                      e.preventDefault();
+                      const name = decodeURIComponent(href.slice(WIKI_PREFIX.length));
+                      void openByName(name);
+                    }
+                  }}
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(body) }}
+                />
+              </div>
+            </div>
           )}
         </div>
       </main>
 
       {doc && !isFramework && (
         <aside className="right">
+          <MetaPanel doc={doc} onSave={(patch) => void saveMeta(patch)} />
           <div className="right-head">反向链接</div>
           <div className="right-body">
             {backlinks.length === 0 && <div className="right-empty">没有笔记链接到这里</div>}
@@ -470,6 +535,28 @@ export function App({ client }: { client: YanClient }): React.ReactElement {
             {String(doc.frontmatter.type ?? 'note')}
           </div>
         </aside>
+      )}
+
+      {present && (
+        <div className="present-shell">
+          <div className="present-bar">
+            <span className="present-label">呈现模式</span>
+            <button className="btn ghost" onClick={() => void exportPng()}>
+              复制为图片
+            </button>
+            <button className="btn ghost" onClick={() => window.print()}>
+              打印 / PDF
+            </button>
+            <button className="btn ghost" onClick={() => setPresent(false)}>
+              退出 Esc
+            </button>
+          </div>
+          <div className="present-paper">
+            <div className="present-title">{doc ? titleOf(doc) : ''}</div>
+            {isExperiment && <ExperimentChart body={body} />}
+            <div className="present-body" dangerouslySetInnerHTML={{ __html: renderMarkdown(body) }} />
+          </div>
+        </div>
       )}
 
       {palette === 'command' && (
