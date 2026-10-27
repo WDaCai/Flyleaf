@@ -87,6 +87,11 @@ export function createHttpClient(opts: HttpClientOptions = {}): YanClient {
       tree: (path) => request(base, 'GET', `/api/v1/framework${qs({ path })}`),
       setState: (path, line, state) => request(base, 'POST', '/api/v1/framework/state', { path, line, state }),
       expandNode: (path, line) => request(base, 'POST', '/api/v1/framework/expand', { path, line }),
+      addNode: (path, opts) => request(base, 'POST', '/api/v1/framework/add', { path, ...opts }),
+      renameNode: (path, line, text) => request(base, 'POST', '/api/v1/framework/rename', { path, line, text }),
+      removeNode: (path, line, opts) =>
+        request(base, 'POST', '/api/v1/framework/remove', { path, line, trashLinked: opts?.trashLinked }),
+      shiftNode: (path, line, delta) => request(base, 'POST', '/api/v1/framework/shift', { path, line, delta }),
     },
     capture: {
       getDraft: () => request(base, 'GET', '/api/v1/capture/draft'),

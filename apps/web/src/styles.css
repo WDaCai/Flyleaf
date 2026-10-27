@@ -594,6 +594,61 @@
   color: var(--accent);
 }
 
+.fw-ops {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  flex: none;
+  transition: opacity var(--dur-fast) var(--ease-soft);
+}
+.fw-row:hover .fw-ops,
+.fw-row:focus-within .fw-ops,
+.fw-row.is-hit .fw-ops {
+  opacity: 1;
+}
+.fw-op {
+  padding: 0 5px;
+  height: 22px;
+  font-size: var(--font-size-xs);
+  color: var(--text-faint);
+  border-radius: var(--radius-xs);
+  font-family: var(--sans);
+}
+.fw-op:hover {
+  color: var(--accent);
+  background: var(--hover-soft-4);
+}
+.fw-op.danger:hover {
+  color: var(--danger);
+}
+.fw-empty-tip {
+  margin: 18px 24px 8px;
+  padding: 14px 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  max-width: 560px;
+}
+.fw-empty-title {
+  font-weight: 600;
+  color: var(--heading);
+  margin-bottom: 6px;
+  font-family: var(--sans);
+}
+.fw-empty-copy {
+  color: var(--text-dim);
+  font-size: var(--font-size-sm);
+  line-height: var(--leading-ui, 1.55);
+  margin-bottom: 12px;
+}
+.fw-empty-copy code {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 0.95em;
+  color: var(--text);
+}
+
+
 /* ---------- 导图 ---------- */
 .mm-wrap {
   position: relative;
@@ -632,6 +687,11 @@
   font-size: var(--font-size-xs);
   padding: 0 6px;
 }
+.mm-link {
+  stroke: var(--mm-link);
+  stroke-width: 1;
+  fill: none;
+}
 .mm-node {
   cursor: pointer;
 }
@@ -643,32 +703,38 @@
 }
 .mm-node:hover rect {
   fill: var(--mm-node-hover);
-  stroke: var(--accent-dim);
+}
+.mm-node.is-selected rect {
+  fill: var(--mm-node-selected);
+  stroke: var(--border);
+}
+.mm-node.is-selected .mm-label {
+  font-weight: 600;
 }
 .mm-node text {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   font-family: var(--sans);
   pointer-events: none;
   fill: var(--text);
 }
-.mm-node .mm-glyph {
-  font-size: var(--font-size-xs);
+.mm-node .mm-label {
+  font-size: var(--font-size-sm);
 }
 .mm-node .mm-count {
   fill: var(--text-faint);
   font-size: 10px;
 }
-.mm-node.state-todo .mm-glyph {
+.mm-node .mm-state-dot {
   fill: var(--state-todo);
+  opacity: 0.85;
 }
-.mm-node.state-learning .mm-glyph {
-  fill: var(--state-learning);
-}
-.mm-node.state-known .mm-glyph {
-  fill: var(--state-known);
-}
-.mm-node.state-used .mm-glyph {
-  fill: var(--state-used);
+.mm-node.state-todo .mm-state-dot { fill: var(--state-todo); }
+.mm-node.state-learning .mm-state-dot { fill: var(--state-learning); }
+.mm-node.state-known .mm-state-dot { fill: var(--state-known); }
+.mm-node.state-used .mm-state-dot { fill: var(--state-used); }
+.mm-node .mm-linked {
+  fill: var(--mm-linked);
+  opacity: 0.9;
 }
 
 /* ---------- 命令面板 ---------- */

@@ -292,6 +292,17 @@ export interface YanClient {
     tree(path: string): Promise<FrameworkTree>;
     setState(path: string, line: number, state: Mastery): Promise<FrameworkTree>;
     expandNode(path: string, line: number): Promise<{ doc: NoteDoc; tree: FrameworkTree }>;
+    addNode(
+      path: string,
+      opts: { afterLine?: number | null; text: string; asChild?: boolean },
+    ): Promise<FrameworkTree>;
+    renameNode(path: string, line: number, text: string): Promise<FrameworkTree>;
+    removeNode(
+      path: string,
+      line: number,
+      opts?: { trashLinked?: boolean },
+    ): Promise<{ tree: FrameworkTree; trashed: string[] }>;
+    shiftNode(path: string, line: number, delta: -1 | 1): Promise<FrameworkTree>;
   };
   capture: {
     getDraft(): Promise<CaptureDraft>;

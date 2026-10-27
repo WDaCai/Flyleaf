@@ -1,0 +1,62 @@
+# 知识框架验收记录
+
+日期：2026-10-28（Asia/Shanghai）
+
+范围：大纲编辑闭环 + 导图跟手可读 + 两视图导航一致（方案审核收口）
+
+## 优先级对齐
+
+- 已做满：大纲 CRUD / 调层级 / 四档状态 / 图例 / 折叠 localStorage；导图 token 连线、适应窗口、缩放平移、工具栏中文；两视图共享折叠/高亮/当前节点；Ctrl+M；单击导图不建文件。
+- 未做（按方案禁止）：导图虚拟化、自由拖节点、力导向、另存 JSON、导图上建文件、重动画换 d3、XMind 全功能。
+
+## 自动门禁
+
+- [x] `npm run check`（typecheck + boundaries + vitest 61 passed）
+- [x] `npm run build:lite` → `E:\Flyleaf`（见本轮构建日志）
+
+## 验收清单（实现对齐，安装目录点验）
+
+### 大纲
+
+1. 增删改节点（行内操作 + 空树「添加根节点」）
+2. Tab / Shift+Tab（或升降按钮）调层级
+3. 四档掌握度 `[ ]/[~]/[x]/[*]` + 顶栏图例计数
+4. 折叠状态按框架 path 写入 localStorage，重开不丢
+5. 改状态 / 折叠后切导图可见对应变化
+
+### 导图
+
+1. 节点文案用 `--sans`，连线用 `--mm-link`（无硬编码 `#2b323c`）
+2. 工具栏「+ / - / 适应」中文正常
+3. 「适应」按当前布局 fit，根落在视口内；换框架文件自动 fit
+4. 滚轮缩放（非 passive）+ 拖拽平移，不抖
+5. 单击：选中 + 按 NavTarget 导航；**绝不新建文件**
+6. 双击：有子节点则折叠/展开
+
+### 两视图导航
+
+1. 共享 `collapsed` / `highlightLine`；大纲改状态/折叠 → 导图同步
+2. Ctrl+M 切换 outline ↔ mindmap
+3. 有关联笔记（`kind: file`）→ 打开文件；无文件（`kind: line`）→ 定位本框架 md 行并高亮
+4. vault 仍是一份缩进 md，协议未改
+
+### 规模
+
+- 30～80 节点可用（全量渲染）
+- >200 节点 toast「建议拆成多棵框架」
+- >500 不宣称虚拟化；DESIGN.md / README 已保留已知限制一句
+
+## 本轮代码要点
+
+| 区域 | 变更 |
+|------|------|
+| `core/.../framework-service.ts` | `addNode` / `renameNode` / `removeNode(trashLinked)` / `shiftNode` |
+| contracts + http/ipc/host/server/app-main | 接通上述 API |
+| `Framework.tsx` | 大纲 CRUD UI、图例、空提示、滚动到高亮行、传 MindMap 选中 |
+| `MindMap.tsx` | token 连线、fitView、选中高亮、单击不建文件、工具栏 |
+| `App.tsx` | 折叠 LS、>200 toast、CRUD handlers、空态 CTA、Ctrl+M、同文件 line 高亮 |
+| `styles.css` / `ui/tokens.css` | `.fw-ops`、`.mm-link`、掌握度色与 mm token |
+
+## 结果
+
+check ✅ · build:lite ✅（刷入 E:\Flyleaf）· 本机 git commit 见仓库日志

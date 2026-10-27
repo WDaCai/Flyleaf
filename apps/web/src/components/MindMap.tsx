@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { hierarchy, tree as d3tree } from 'd3-hierarchy';
 import type { FrameworkTree, NavTarget, TreeNode } from '@flyleaf/core/contracts';
-import { STATE_GLYPH } from '@flyleaf/ui';
 
 const NODE_W = 196;
 const NODE_H = 26;
@@ -52,9 +51,18 @@ export interface MindMapProps {
   collapsed: Set<string>;
   onToggle: (id: string) => void;
   onNavigate: (target: NavTarget | null) => void;
+  highlightLine: number | null;
+  onSelectLine: (line: number | null) => void;
 }
 
-export function MindMap({ framework, collapsed, onToggle, onNavigate }: MindMapProps): React.ReactElement {
+export function MindMap({
+  framework,
+  collapsed,
+  onToggle,
+  onNavigate,
+  highlightLine,
+  onSelectLine,
+}: MindMapProps): React.ReactElement {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragRef = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
   const [view, setView] = useState({ k: 1, tx: PAD, ty: PAD });
@@ -99,20 +107,23 @@ export function MindMap({ framework, collapsed, onToggle, onNavigate }: MindMapP
     return { nodes, links, minX, maxX, minY, maxY };
   }, [framework, collapsed]);
 
-  // 切换框架文件时自动回到「适应窗口」视图
-  useEffect(() => {
+  const fitView = useCallback((): void => {
     const el = svgRef.current;
     const w = el?.clientWidth ?? 900;
     const h = el?.clientHeight ?? 600;
     const cw = Math.max(1, layout.maxX - layout.minX);
     const ch = Math.max(1, layout.maxY - layout.minY);
-    const k = Math.min(1, Math.min((w - PAD * 2) / cw, (h - PAD * 2) / ch));
+    const k = Math.min(1.15, Math.max(0.35, Math.min((w - PAD * 2) / cw, (h - PAD * 2) / ch)));
     setView({
       k,
       tx: (w - cw * k) / 2 - layout.minX * k,
       ty: (h - ch * k) / 2 - layout.minY * k,
     });
-    // 只在框架文件或折叠状态变化时重排视图
+  }, [layout]);
+
+  // 切换框架文件时自动适应窗口，保证根在视口内
+  useEffect(() => {
+    fitView();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [framework.path]);
 
@@ -157,22 +168,31 @@ export function MindMap({ framework, collapsed, onToggle, onNavigate }: MindMapP
   };
 
   const zoomBy = (factor: number): void => {
-    setView((v) => ({ ...v, k: Math.min(2, Math.max(0.35, v.k * factor)) }));
+    const el = svgRef.current;
+    const w = el?.clientWidth ?? 900;
+    const h = el?.clientHeight ?? 600;
+    const cx = w / 2;
+    const cy = h / 2;
+    setView((v) => {
+      const nextK = Math.min(2, Math.max(0.35, v.k * factor));
+      const ratio = nextK / v.k;
+      return { k: nextK, tx: cx - (cx - v.tx) * ratio, ty: cy - (cy - v.ty) * ratio };
+    });
   };
 
   return (
     <div className="mm-wrap">
       <div className="mm-toolbar">
-        <button className="icon-btn" title="放大" onClick={() => zoomBy(1.2)}>
-          ＋
+        <button type="button" className="icon-btn" title="放大" onClick={() => zoomBy(1.2)}>
+          +
         </button>
-        <button className="icon-btn" title="缩小" onClick={() => zoomBy(0.83)}>
-          －
+        <button type="button" className="icon-btn" title="缩小" onClick={() => zoomBy(0.83)}>
+          -
         </button>
-        <button className="icon-btn" title="适应窗口" onClick={() => setView((v) => ({ ...v, k: 1, tx: PAD, ty: PAD }))}>
-          ⊙
+        <button type="button" className="icon-btn" title="适应窗口" onClick={fitView}>
+          适应
         </button>
-        <span className="mm-hint">双击折叠 · 滚轮缩放 · 拖拽平移</span>
+        <span className="mm-hint">单击选中/跳转 · 双击折叠 · 滚轮缩放 · 拖拽平移</span>
       </div>
       <svg
         ref={svgRef}
@@ -188,44 +208,50 @@ export function MindMap({ framework, collapsed, onToggle, onNavigate }: MindMapP
             return (
               <path
                 key={l.id}
+                className="mm-link"
                 d={`M ${l.from.x} ${l.from.y} C ${mid} ${l.from.y}, ${mid} ${l.to.y}, ${l.to.x} ${l.to.y}`}
                 fill="none"
-                stroke="#2b323c"
-                strokeWidth={1.4}
               />
             );
           })}
 
-          {layout.nodes.map((n) => (
-            <g
-              key={n.id}
-              data-node={n.id}
-              transform={`translate(${n.x},${n.y})`}
-              className={`mm-node state-${n.state}`}
-              onClick={() => onNavigate(n.target)}
-              onDoubleClick={(e) => {
-                e.stopPropagation();
-                if (n.childCount > 0) onToggle(n.id);
-              }}
-            >
-              <title>{`${n.text}\n第 ${n.line} 行 · ${n.linkedNotes} 条关联`}</title>
-              <rect width={NODE_W} height={NODE_H} rx={6} />
-              <text x={10} y={NODE_H / 2 + 4} className="mm-glyph">
-                {STATE_GLYPH[n.state] ?? '○'}
-              </text>
-              <text x={26} y={NODE_H / 2 + 4} className="mm-label">
-                {n.text.length > 14 ? `${n.text.slice(0, 14)}…` : n.text}
-              </text>
-              {n.childCount > 0 && (
-                <text x={NODE_W - 12} y={NODE_H / 2 + 4} className="mm-count" textAnchor="end">
-                  {n.collapsed ? `+${n.childCount}` : ''}
+          {layout.nodes.map((n) => {
+            const selected = n.line > 0 && highlightLine === n.line;
+            const label = n.text.length > 14 ? `${n.text.slice(0, 14)}…` : n.text;
+            return (
+              <g
+                key={n.id}
+                data-node={n.id}
+                transform={`translate(${n.x},${n.y})`}
+                className={`mm-node state-${n.state}${selected ? ' is-selected' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // 单击只导航/选中，绝不新建文件
+                  if (n.line > 0) onSelectLine(n.line);
+                  onNavigate(n.target);
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  if (n.childCount > 0) onToggle(n.id);
+                }}
+              >
+                <title>{`${n.text}\n第 ${n.line} 行 · ${n.linkedNotes} 条关联`}</title>
+                <rect width={NODE_W} height={NODE_H} rx={6} />
+                <circle className="mm-state-dot" cx={11} cy={NODE_H / 2} r={3.2} />
+                <text x={20} y={NODE_H / 2 + 4} className="mm-label">
+                  {label}
                 </text>
-              )}
-              {n.linkedNotes > 0 && (
-                <circle cx={NODE_W - 8} cy={8} r={3} fill="var(--used)" opacity={0.9} />
-              )}
-            </g>
-          ))}
+                {n.childCount > 0 && (
+                  <text x={NODE_W - 12} y={NODE_H / 2 + 4} className="mm-count" textAnchor="end">
+                    {n.collapsed ? `+${n.childCount}` : ''}
+                  </text>
+                )}
+                {n.linkedNotes > 0 && (
+                  <circle cx={NODE_W - 8} cy={8} r={3} className="mm-linked" />
+                )}
+              </g>
+            );
+          })}
         </g>
       </svg>
     </div>

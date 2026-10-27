@@ -46,6 +46,10 @@ export function createIpcClient(bridge: IpcBridge): YanClient {
       tree: (path) => call('framework.tree', path),
       setState: (path, line, state) => call('framework.setState', path, line, state),
       expandNode: (path, line) => call('framework.expandNode', path, line),
+      addNode: (path, opts) => call('framework.addNode', path, opts),
+      renameNode: (path, line, text) => call('framework.renameNode', path, line, text),
+      removeNode: (path, line, opts) => call('framework.removeNode', path, line, opts),
+      shiftNode: (path, line, delta) => call('framework.shiftNode', path, line, delta),
     },
     capture: {
       getDraft: () => call('capture.getDraft'),

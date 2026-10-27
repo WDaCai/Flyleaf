@@ -183,6 +183,18 @@ async function dispatch(method: string, args: unknown[]): Promise<unknown> {
       return c.framework.setState(String(args[0]), Number(args[1]), args[2] as 'todo' | 'learning' | 'known' | 'used');
     case 'framework.expandNode':
       return c.framework.expandNode(String(args[0]), Number(args[1]));
+    case 'framework.addNode':
+      return c.framework.addNode(String(args[0]), args[1] as Parameters<typeof c.framework.addNode>[1]);
+    case 'framework.renameNode':
+      return c.framework.renameNode(String(args[0]), Number(args[1]), String(args[2]));
+    case 'framework.removeNode':
+      return c.framework.removeNode(
+        String(args[0]),
+        Number(args[1]),
+        args[2] as Parameters<typeof c.framework.removeNode>[2],
+      );
+    case 'framework.shiftNode':
+      return c.framework.shiftNode(String(args[0]), Number(args[1]), Number(args[2]) < 0 ? -1 : 1);
     case 'capture.getDraft':
       return c.capture.getDraft();
     case 'capture.saveDraft':

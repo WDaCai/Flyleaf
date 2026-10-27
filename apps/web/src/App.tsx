@@ -142,6 +142,37 @@ function firstNoteLeaf(nodes: FileNode[]): FileNode | null {
   return null;
 }
 
+
+function collapseStorageKey(path: string): string {
+  return `flyleaf.fw.collapsed:${path}`;
+}
+
+function resolveFrameworkDir(folders: FoldersConfig | null): string {
+  const list = folders?.folders ?? [];
+  const byPath = list.find((f) => /framework/i.test(f.path));
+  if (byPath) return byPath.path;
+  const byTitle = list.find((f) => /框架/.test(f.title));
+  if (byTitle) return byTitle.path;
+  return '50-frameworks';
+}
+
+function countFrameworkFiles(nodes: FileNode[]): number {
+  let n = 0;
+  const walk = (list: FileNode[]): void => {
+    for (const x of list) {
+      if (x.kind === 'file' && /framework/i.test(x.path)) {
+        /* path heuristic weak; rely on search when possible */
+      }
+      if (x.kind === 'dir' && x.children) walk(x.children);
+      if (x.kind === 'file' && x.path.includes('50-frameworks') && x.path.endsWith('.md') && !x.path.includes('/nodes/')) {
+        n += 1;
+      }
+    }
+  };
+  walk(nodes);
+  return n;
+}
+
 function titleOf(doc: NoteDoc): string {
   const t = doc.frontmatter.title;
   return typeof t === 'string' && t.trim() ? t.trim() : withoutExt(doc.path);
@@ -162,6 +193,9 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
   const [framework, setFramework] = useState<FrameworkTree | null>(null);
   const [fwMode, setFwMode] = useState<'outline' | 'mindmap'>('outline');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [hasFrameworkNotes, setHasFrameworkNotes] = useState(true);
+  const fwCollapsePath = useRef<string | null>(null);
+  const largeTreeWarned = useRef<string | null>(null);
   const [highlightLine, setHighlightLine] = useState<number | null>(null);
   const [backlinks, setBacklinks] = useState<Backlink[]>([]);
   const [status, setStatus] = useState('就绪');
@@ -230,9 +264,17 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
 
   const refreshTree = useCallback(async () => {
     try {
-      setTree(await client.vault.tree());
+      const next = await client.vault.tree();
+      setTree(next);
+      try {
+        const hits = await client.search.query({ type: 'framework', limit: 1 });
+        setHasFrameworkNotes(hits.length > 0 || countFrameworkFiles(next) > 0);
+      } catch {
+        setHasFrameworkNotes(countFrameworkFiles(next) > 0);
+      }
     } catch {
       setTree([]);
+      setHasFrameworkNotes(false);
     }
   }, [client]);
 
@@ -324,6 +366,10 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
   const navigate = useCallback(
     async (target: NavTarget | null): Promise<void> => {
       if (!target) return;
+      if (target.kind === 'line' && docRef.current?.path === target.path) {
+        setHighlightLine(target.line);
+        return;
+      }
       await openPath(target.path);
       if (target.kind === 'line') setHighlightLine(target.line);
     },
@@ -661,6 +707,157 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
     });
   }, []);
 
+  // 折叠状态按框架 path 记住
+  useEffect(() => {
+    if (!framework) {
+      fwCollapsePath.current = null;
+      return;
+    }
+    if (fwCollapsePath.current === framework.path) return;
+    fwCollapsePath.current = framework.path;
+    try {
+      const raw = localStorage.getItem(collapseStorageKey(framework.path));
+      if (raw) {
+        const arr = JSON.parse(raw) as unknown;
+        if (Array.isArray(arr)) setCollapsed(new Set(arr.filter((x): x is string => typeof x === 'string')));
+        else setCollapsed(new Set());
+      } else {
+        setCollapsed(new Set());
+      }
+    } catch {
+      setCollapsed(new Set());
+    }
+  }, [framework]);
+
+  useEffect(() => {
+    if (!framework) return;
+    try {
+      localStorage.setItem(collapseStorageKey(framework.path), JSON.stringify([...collapsed]));
+    } catch {
+      /* ignore */
+    }
+  }, [collapsed, framework]);
+
+  useEffect(() => {
+    if (!framework) return;
+    if (framework.stats.total <= 200) return;
+    if (largeTreeWarned.current === framework.path) return;
+    largeTreeWarned.current = framework.path;
+    flashStatus('节点超过 200，建议拆成多棵框架');
+  }, [framework, flashStatus]);
+
+  const refreshFrameworkDoc = useCallback(async (): Promise<void> => {
+    const d = docRef.current;
+    if (!d) return;
+    const fresh = await client.notes.read(d.path);
+    docRef.current = fresh;
+    bodyRef.current = fresh.body;
+    setDoc(fresh);
+    setBody(fresh.body);
+  }, [client]);
+
+  const addFwNode = useCallback(
+    async (afterLine: number | null, asChild: boolean): Promise<void> => {
+      const d = docRef.current;
+      if (!d) return;
+      const text = window.prompt(asChild ? '子节点标题' : '节点标题', '新节点');
+      if (!text || !text.trim()) return;
+      await doSave();
+      setFramework(
+        await client.framework.addNode(d.path, { afterLine, text: text.trim(), asChild }),
+      );
+      await refreshFrameworkDoc();
+      setStatus('已添加节点');
+    },
+    [client, doSave, refreshFrameworkDoc],
+  );
+
+  const renameFwNode = useCallback(
+    async (line: number): Promise<void> => {
+      const d = docRef.current;
+      if (!d || !framework) return;
+      const walk = (n: typeof framework.root): string | null => {
+        if (n.line === line) return n.text;
+        for (const c of n.children) {
+          const hit = walk(c);
+          if (hit != null) return hit;
+        }
+        return null;
+      };
+      const cur = walk(framework.root) ?? '';
+      const text = window.prompt('重命名节点', cur);
+      if (!text || !text.trim() || text.trim() === cur) return;
+      await doSave();
+      setFramework(await client.framework.renameNode(d.path, line, text.trim()));
+      await refreshFrameworkDoc();
+      setHighlightLine(line);
+      setStatus(`已重命名第 ${line} 行`);
+    },
+    [client, doSave, framework, refreshFrameworkDoc],
+  );
+
+  const removeFwNode = useCallback(
+    async (line: number): Promise<void> => {
+      const d = docRef.current;
+      if (!d || !framework) return;
+      const walk = (
+        n: typeof framework.root,
+      ): { text: string; hasFile: boolean; kids: number } | null => {
+        if (n.line === line) {
+          const count = (x: typeof n): number => 1 + x.children.reduce((a, c) => a + count(c), 0);
+          return {
+            text: n.text,
+            hasFile: n.target?.kind === 'file',
+            kids: count(n) - 1,
+          };
+        }
+        for (const c of n.children) {
+          const hit = walk(c);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      const info = walk(framework.root);
+      if (!info) return;
+      const extra = info.kids > 0 ? `（含 ${info.kids} 个子节点）` : '';
+      const fileTip = info.hasFile
+        ? '\n关联的独立笔记会移入回收站（可还原），不会静默硬删。'
+        : '';
+      const ok = window.confirm(`删除节点「${info.text}」${extra}？${fileTip}`);
+      if (!ok) return;
+      await doSave();
+      const res = await client.framework.removeNode(d.path, line, { trashLinked: true });
+      setFramework(res.tree);
+      await refreshFrameworkDoc();
+      setHighlightLine(null);
+      if (res.trashed.length) {
+        flashStatus(`已删除节点，${res.trashed.length} 个关联笔记已入回收站`);
+        await refreshTrash();
+      } else {
+        setStatus('已删除节点');
+      }
+    },
+    [client, doSave, flashStatus, framework, refreshFrameworkDoc, refreshTrash],
+  );
+
+  const shiftFwNode = useCallback(
+    async (line: number, delta: -1 | 1): Promise<void> => {
+      const d = docRef.current;
+      if (!d) return;
+      await doSave();
+      setFramework(await client.framework.shiftNode(d.path, line, delta));
+      await refreshFrameworkDoc();
+      setHighlightLine(line);
+      setStatus(delta > 0 ? '已降级' : '已升级');
+    },
+    [client, doSave, refreshFrameworkDoc],
+  );
+
+  const createFrameworkNote = useCallback(async (): Promise<void> => {
+    const dir = resolveFrameworkDir(folders);
+    await createNote('framework', dir);
+  }, [createNote, folders]);
+
   /** 属性面板保存：连同当前正文一起提交，避免丢字 */
   const saveMeta = useCallback(
     async (patch: Record<string, unknown>): Promise<void> => {
@@ -828,6 +1025,12 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
     ];
     const actions: PaletteItem[] = [
       {
+        id: 'new-framework',
+        label: '新建框架笔记',
+        hint: '框架',
+        run: () => void createFrameworkNote(),
+      },
+      {
         id: 'markdown-guide',
         label: '打开 Markdown 写法说明',
         hint: '帮助',
@@ -906,7 +1109,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
     };
     walk(tree);
     return [...actions, ...files];
-  }, [active, clearTrash, createNote, flashStatus, focusMode, folders, openMarkdownGuide, openPath, restoreLatest, setEditorWidthPref, setInboxFolder, toggleFocus, trashOpen, tree]);
+  }, [active, clearTrash, createNote, createFrameworkNote, flashStatus, focusMode, folders, openMarkdownGuide, openPath, restoreLatest, setEditorWidthPref, setInboxFolder, toggleFocus, trashOpen, tree]);
 
   const searchFn = useCallback(
     async (q: string): Promise<PaletteItem[]> => {
@@ -1204,6 +1407,17 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
                   </button>
                 </>
               )}
+              {!hasFrameworkNotes && (
+                <>
+                  <div className="empty-plain-title" style={{ marginTop: 28 }}>
+                    还没有知识框架
+                  </div>
+                  <div className="empty-plain-copy">一棵缩进树，大纲与导图读同一份 Markdown。不超过两步就能建出根和子节点。</div>
+                  <button type="button" className="btn primary" onClick={() => void createFrameworkNote()}>
+                    新建框架笔记
+                  </button>
+                </>
+              )}
             </div>
           )}
 
@@ -1215,9 +1429,14 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
               onSetState={(line, state) => void setNodeState(line, state)}
               onExpand={(line) => void expandNode(line)}
               onNavigate={(t) => void navigate(t)}
+              onAddNode={(after, asChild) => void addFwNode(after, asChild)}
+              onRenameNode={(line) => void renameFwNode(line)}
+              onRemoveNode={(line) => void removeFwNode(line)}
+              onShiftNode={(line, delta) => void shiftFwNode(line, delta)}
               collapsed={collapsed}
               onToggle={toggleCollapse}
               highlightLine={highlightLine}
+              onSelectLine={setHighlightLine}
             />
           )}
 
@@ -1466,8 +1685,26 @@ function TreeView({
   onFileMenu?: (path: string, x: number, y: number) => void;
 }): React.ReactElement {
   const [open, setOpen] = useState<Set<string>>(new Set());
+  const userTouched = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    setOpen((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const n of nodes) {
+        if (n.kind !== 'dir') continue;
+        // 顶层目录默认展开，但用户点过收起后不再强行打开
+        if (!userTouched.current.has(n.path) && !next.has(n.path)) {
+          next.add(n.path);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [nodes]);
 
   const toggle = (p: string): void => {
+    userTouched.current.add(p);
     setOpen((prev) => {
       const next = new Set(prev);
       if (next.has(p)) next.delete(p);
@@ -1479,7 +1716,7 @@ function TreeView({
   const render = (list: FileNode[], depth: number): React.ReactNode =>
     list.map((n) => {
       if (n.kind === 'dir') {
-        const expanded = open.has(n.path) || depth === 0;
+        const expanded = open.has(n.path);
         const isInbox = inboxPath === n.path;
         const kids = n.children ?? [];
         const empty = kids.length === 0;

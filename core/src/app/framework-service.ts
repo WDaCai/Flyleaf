@@ -5,7 +5,7 @@ import { basename, joinRel, slugify, stripExt } from '../domain/paths';
 import { replaceStateMarker } from '../domain/state';
 import { splitDocument } from '../domain/text';
 import { parseOutline } from '../domain/outline';
-import { buildTree } from '../domain/tree';
+import { buildTree, flattenTree, findNodeByLine } from '../domain/tree';
 import { resolveTargetName } from '../domain/wikilink';
 import { BadRequestError, NotFoundError } from '../errors';
 import type { IndexProvider, NoteRepo } from '../ports';
@@ -13,6 +13,8 @@ import type { EventBus } from './event-bus';
 import type { NoteService } from './note-service';
 
 const NODE_DIR = '50-frameworks/nodes';
+const LIST_PREFIX = /^(\s*)([-*+]|\d+[.)])\s+/;
+const HEADING_LINE = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
 
 export class FrameworkService {
   constructor(
@@ -95,6 +97,187 @@ export class FrameworkService {
     return { doc, tree: nextTree };
   }
 
+  /** 在锚点后新增列表节点；asChild=true 时作为子节点，否则作为同级（插在子树之后） */
+  async addNode(
+    rel: string,
+    opts: { afterLine?: number | null; text: string; asChild?: boolean },
+  ): Promise<FrameworkTree> {
+    const text = (opts.text ?? '').trim() || '新节点';
+    const raw = await this.repo.read(rel);
+    const eol = splitDocument(raw.raw).eol;
+    const lines = raw.raw.split(/\r?\n/);
+    const asChild = opts.asChild !== false;
+
+    if (!opts.afterLine) {
+      lines.push(`- [ ] ${text}`);
+      await this.repo.write(rel, lines.join(eol));
+      this.events.emit({ type: 'note:changed', path: rel });
+      return this.tree(rel);
+    }
+
+    const tree = await this.tree(rel);
+    const flat = flattenTree(tree.root).filter((n) => n.line > 0);
+    const startFlat = flat.findIndex((n) => n.line === opts.afterLine);
+    if (startFlat < 0) throw new NotFoundError(`${rel}:${opts.afterLine}`);
+    const anchor = flat[startFlat]!;
+    const anchorIdx = opts.afterLine - 1;
+    const anchorLine = lines[anchorIdx] ?? '';
+    const listMatch = LIST_PREFIX.exec(anchorLine);
+    const heading = HEADING_LINE.exec(anchorLine);
+
+    let indent = '';
+    if (listMatch) {
+      const base = listMatch[1] ?? '';
+      indent = asChild ? `${base}  ` : base;
+    } else if (heading) {
+      indent = asChild ? '' : '';
+    }
+
+    let lastLine = anchor.line;
+    const depthLimit = asChild ? anchor.depth : anchor.depth;
+    for (let i = startFlat + 1; i < flat.length; i++) {
+      const n = flat[i]!;
+      if (n.depth <= depthLimit) break;
+      lastLine = n.line;
+    }
+    // 同级：插在整棵子树后；子级：同样插在子树末（成为最后一个孩子）
+    const insertAt = lastLine; // 1-based → splice index
+
+    let newLine: string;
+    if (heading && !asChild) {
+      newLine = `${heading[1]} ${text}`;
+    } else {
+      newLine = `${indent}- [ ] ${text}`;
+    }
+    lines.splice(insertAt, 0, newLine);
+    await this.repo.write(rel, lines.join(eol));
+    this.events.emit({ type: 'note:changed', path: rel });
+    return this.tree(rel);
+  }
+
+  /** 重命名节点文本；保留状态标记与行尾 wikilink */
+  async renameNode(rel: string, line: number, text: string): Promise<FrameworkTree> {
+    const nextText = text.trim();
+    if (!nextText) throw new BadRequestError('标题不能为空');
+    const raw = await this.repo.read(rel);
+    const eol = splitDocument(raw.raw).eol;
+    const lines = raw.raw.split(/\r?\n/);
+    const idx = line - 1;
+    if (idx < 0 || idx >= lines.length) throw new BadRequestError(`行号越界：${line}`);
+    const cur = lines[idx] ?? '';
+    const heading = HEADING_LINE.exec(cur);
+    if (heading) {
+      lines[idx] = `${heading[1]} ${nextText}`;
+    } else {
+      const listMatch = LIST_PREFIX.exec(cur);
+      if (!listMatch) throw new BadRequestError('该行不是框架节点');
+      const prefix = listMatch[0];
+      const rest = cur.slice(prefix.length);
+      const state = rest.match(/^(\[[ xX~*]\])\s*/);
+      const afterState = state ? rest.slice(state[0].length) : rest;
+      const wiki = afterState.match(/\[\[[^[\]\n]*\]\]/g);
+      const wikiSuffix = wiki && wiki.length ? ` ${wiki.join(' ')}` : '';
+      const marker = state ? `${state[1]} ` : '';
+      lines[idx] = `${prefix}${marker}${nextText}${wikiSuffix}`;
+    }
+    await this.repo.write(rel, lines.join(eol));
+    this.events.emit({ type: 'note:changed', path: rel });
+    return this.tree(rel);
+  }
+
+  /**
+   * 删除节点及其子树。
+   * 若子树内节点挂了独立笔记文件，按 trashLinked 移入回收站（默认 true）。
+   */
+  async removeNode(
+    rel: string,
+    line: number,
+    opts?: { trashLinked?: boolean },
+  ): Promise<{ tree: FrameworkTree; trashed: string[] }> {
+    const trashLinked = opts?.trashLinked !== false;
+    const tree = await this.tree(rel);
+    const flat = flattenTree(tree.root).filter((n) => n.line > 0);
+    const startFlat = flat.findIndex((n) => n.line === line);
+    if (startFlat < 0) throw new NotFoundError(`${rel}:${line}`);
+    const anchor = flat[startFlat]!;
+    const toRemove = new Set<number>([anchor.line]);
+    for (let i = startFlat + 1; i < flat.length; i++) {
+      const n = flat[i]!;
+      if (n.depth <= anchor.depth) break;
+      toRemove.add(n.line);
+    }
+
+    const trashed: string[] = [];
+    if (trashLinked) {
+      for (const n of flat) {
+        if (!toRemove.has(n.line)) continue;
+        if (n.target?.kind === 'file' && n.target.path !== rel) {
+          try {
+            await this.notes.delete({ path: n.target.path, mode: 'trash' });
+            trashed.push(n.target.path);
+          } catch {
+            /* 文件可能已不存在，仍继续删行 */
+          }
+        }
+      }
+    }
+
+    const raw = await this.repo.read(rel);
+    const eol = splitDocument(raw.raw).eol;
+    const lines = raw.raw.split(/\r?\n/);
+    const nextLines = lines.filter((_, i) => !toRemove.has(i + 1));
+    await this.repo.write(rel, nextLines.join(eol));
+    this.events.emit({ type: 'note:changed', path: rel });
+    return { tree: await this.tree(rel), trashed };
+  }
+
+  /** 缩进/反缩进节点及其子树；delta=+1 加深，-1 变浅 */
+  async shiftNode(rel: string, line: number, delta: -1 | 1): Promise<FrameworkTree> {
+    const tree = await this.tree(rel);
+    const flat = flattenTree(tree.root).filter((n) => n.line > 0);
+    const startFlat = flat.findIndex((n) => n.line === line);
+    if (startFlat < 0) throw new NotFoundError(`${rel}:${line}`);
+    const anchor = flat[startFlat]!;
+    if (anchor.depth + delta < 0) return tree;
+
+    const linesToShift = new Set<number>([anchor.line]);
+    for (let i = startFlat + 1; i < flat.length; i++) {
+      const n = flat[i]!;
+      if (n.depth <= anchor.depth) break;
+      linesToShift.add(n.line);
+    }
+
+    const raw = await this.repo.read(rel);
+    const eol = splitDocument(raw.raw).eol;
+    const lines = raw.raw.split(/\r?\n/);
+    const step = '  ';
+
+    for (const ln of linesToShift) {
+      const idx = ln - 1;
+      const cur = lines[idx] ?? '';
+      const heading = HEADING_LINE.exec(cur);
+      if (heading) {
+        const level = (heading[1] ?? '#').length;
+        const nextLevel = Math.min(6, Math.max(1, level + delta));
+        lines[idx] = `${'#'.repeat(nextLevel)} ${(heading[2] ?? '').trim()}`;
+        continue;
+      }
+      const listMatch = LIST_PREFIX.exec(cur);
+      if (!listMatch) continue;
+      const indent = listMatch[1] ?? '';
+      if (delta > 0) {
+        lines[idx] = `${step}${cur}`;
+      } else {
+        if (indent.length < 2) continue;
+        lines[idx] = cur.replace(/^ {1,2}/, '') ;
+      }
+    }
+
+    await this.repo.write(rel, lines.join(eol));
+    this.events.emit({ type: 'note:changed', path: rel });
+    return this.tree(rel);
+  }
+
   /** 把 wikilink 目标解析成相对路径：同目录优先 → 全库唯一 → 否则不可解 */
   private resolveLink(target: string, fromRel: string): string | null {
     const name = resolveTargetName(target).toLowerCase();
@@ -125,13 +308,6 @@ function dirOf(p: string): string {
 }
 
 function findInTree(tree: FrameworkTree, line: number): { text: string; target: NavTarget | null } | null {
-  const walk = (node: typeof tree.root): { text: string; target: NavTarget | null } | null => {
-    if (node.line === line) return { text: node.text, target: node.target };
-    for (const c of node.children) {
-      const hit = walk(c);
-      if (hit) return hit;
-    }
-    return null;
-  };
-  return walk(tree.root);
+  const node = findNodeByLine(tree.root, line);
+  return node ? { text: node.text, target: node.target } : null;
 }

@@ -70,6 +70,10 @@ export class CoreHost {
         tree: (p) => c().framework.tree(p),
         setState: (p, line, state) => c().framework.setState(p, line, state),
         expandNode: (p, line) => c().framework.expandNode(p, line),
+        addNode: (p, opts) => c().framework.addNode(p, opts),
+        renameNode: (p, line, text) => c().framework.renameNode(p, line, text),
+        removeNode: (p, line, opts) => c().framework.removeNode(p, line, opts),
+        shiftNode: (p, line, delta) => c().framework.shiftNode(p, line, delta),
       },
       capture: {
         getDraft: () => c().capture.getDraft(),

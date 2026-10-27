@@ -157,6 +157,39 @@ export function createServer(host: CoreHost, opts: ServerOptions = {}): FastifyI
     return guard(() => host.client.framework.expandNode(str(body.path, 'path'), Number(body.line)));
   });
 
+  app.post('/api/v1/framework/add', async (req) => {
+    const body = (req.body ?? {}) as Body;
+    const afterLine = body.afterLine == null || body.afterLine === '' ? null : Number(body.afterLine);
+    return guard(() =>
+      host.client.framework.addNode(str(body.path, 'path'), {
+        afterLine,
+        text: typeof body.text === 'string' ? body.text : '新节点',
+        asChild: body.asChild !== false,
+      }),
+    );
+  });
+
+  app.post('/api/v1/framework/rename', async (req) => {
+    const body = (req.body ?? {}) as Body;
+    return guard(() =>
+      host.client.framework.renameNode(str(body.path, 'path'), Number(body.line), str(body.text, 'text')),
+    );
+  });
+
+  app.post('/api/v1/framework/remove', async (req) => {
+    const body = (req.body ?? {}) as Body;
+    const trashLinked = body.trashLinked !== false && body.trashLinked !== 'false';
+    return guard(() =>
+      host.client.framework.removeNode(str(body.path, 'path'), Number(body.line), { trashLinked }),
+    );
+  });
+
+  app.post('/api/v1/framework/shift', async (req) => {
+    const body = (req.body ?? {}) as Body;
+    const delta = Number(body.delta) < 0 ? -1 : 1;
+    return guard(() => host.client.framework.shiftNode(str(body.path, 'path'), Number(body.line), delta));
+  });
+
   app.get('/api/v1/capture/draft', async () => guard(() => host.client.capture.getDraft()));
 
   app.put('/api/v1/capture/draft', async (req) => {

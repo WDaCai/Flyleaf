@@ -35,6 +35,9 @@
   --hover-soft-4: rgba(201, 132, 90, 0.06);
   --mm-node-hover: #2a2f3a;
   --mm-dot: #1f232b;
+  --mm-link: #2b323c;
+  --mm-node-selected: #2e3440;
+  --mm-linked: #b090c4;
   --card-close-hover: #2e333e;
   --placeholder: #5a554e;
   --meta-placeholder: #524e47;
@@ -108,6 +111,9 @@
   --hover-soft-4: rgba(181, 111, 69, 0.05);
   --mm-node-hover: #ebe6dc;
   --mm-dot: #ddd6c8;
+  --mm-link: #d4cdc0;
+  --mm-node-selected: #e8e2d6;
+  --mm-linked: #8f6fa0;
   --card-close-hover: #ebe6dc;
   --placeholder: #a8a296;
   --meta-placeholder: #b0a99c;
