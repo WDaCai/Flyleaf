@@ -1,0 +1,338 @@
+/* ---------- 文档区容器 ---------- */
+.doc-wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.doc-main {
+  flex: 1;
+  min-height: 0;
+  max-width: var(--editor-max);
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ---------- 属性面板 ---------- */
+.meta {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.meta-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.meta-type {
+  font-size: var(--font-size-xs);
+  color: var(--accent);
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius-sm);
+  padding: 0 6px;
+}
+.meta-status {
+  font-size: var(--font-size-xs);
+  color: var(--text-faint);
+}
+.meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 24px;
+}
+.meta-label {
+  flex: none;
+  width: 52px;
+  font-size: var(--font-size-xs);
+  color: var(--text-faint);
+}
+.meta-input {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  color: var(--text);
+  outline: none;
+}
+.meta-input:hover {
+  border-color: var(--border);
+}
+.meta-input:focus {
+  border-color: var(--accent-dim);
+  background: var(--bg);
+}
+.meta-input::placeholder {
+  color: var(--meta-placeholder);
+}
+
+/* ---------- 实验对比图 ---------- */
+.exp {
+  flex: none;
+  padding: 8px 16px 2px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border-soft);
+}
+.exp-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 2px;
+}
+.exp-title {
+  font-size: var(--font-size-sm);
+  color: var(--text-dim);
+}
+.exp-sub {
+  font-size: var(--font-size-xs);
+  color: var(--text-faint);
+}
+.exp-legend {
+  margin-left: auto;
+  display: flex;
+  gap: 12px;
+  font-size: var(--font-size-xs);
+  color: var(--text-faint);
+}
+.exp-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.exp-legend-item i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-xs);
+}
+.exp-svg {
+  width: 100%;
+  height: 152px;
+}
+.exp-chart {
+  display: flex;
+  gap: 28px;
+  height: 104px;
+  padding: 4px 2px 2px;
+}
+.exp-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.exp-bars {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-soft);
+  padding-bottom: 2px;
+}
+.exp-bar-wrap {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.exp-bar {
+  width: 100%;
+  max-width: 46px;
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+  min-height: 3px;
+  transition: height var(--dur-mid) var(--ease-soft);
+}
+.exp-val {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  line-height: 1;
+}
+.exp-metric {
+  padding-top: 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- 呈现模式 ---------- */
+.present-shell {
+  font-family: var(--sans);
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  overflow: auto;
+  padding: 66px 0 90px;
+  background: var(--present-bg);
+  animation: fl-fade-in var(--dur-mid) var(--ease-soft) both;
+}
+.present-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 81;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 18px;
+  background: var(--present-bar-bg);
+  backdrop-filter: blur(8px);
+}
+.present-label {
+  margin-right: auto;
+  color: var(--present-bar-fg);
+  font-size: var(--font-size-sm);
+  letter-spacing: 1px;
+}
+.present-paper {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 0 32px;
+}
+.present-title {
+  margin: 0 0 22px;
+  font-size: 27px;
+  font-weight: 700;
+  color: var(--present-ink);
+  letter-spacing: 0.5px;
+}
+.present-body {
+  color: var(--present-body);
+  font-size: 15px;
+  line-height: 1.9;
+}
+.present-body h1,
+.present-body h2,
+.present-body h3 {
+  color: var(--present-ink);
+  line-height: 1.4;
+  margin: 1.5em 0 0.6em;
+}
+.present-body h2 {
+  font-size: 19px;
+  border-bottom: 1px solid var(--present-line);
+  padding-bottom: 6px;
+}
+.present-body h3 {
+  font-size: 16px;
+}
+.present-body p,
+.present-body li {
+  color: var(--present-body);
+}
+.present-body ul,
+.present-body ol {
+  padding-left: 24px;
+}
+.present-body blockquote {
+  margin: 12px 0;
+  padding: 6px 14px;
+  border-left: 3px solid var(--present-quote);
+  color: var(--present-muted);
+  background: var(--present-chip);
+}
+.present-body table {
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: var(--font-size);
+}
+.present-body th,
+.present-body td {
+  border: 1px solid var(--present-line-2);
+  padding: 6px 12px;
+}
+.present-body th {
+  background: var(--present-chip-2);
+}
+.present-body code {
+  background: var(--present-chip-2);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-md);
+}
+.present-body pre {
+  background: var(--present-code-bg);
+  color: var(--present-code-fg);
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  overflow: auto;
+}
+.present-body pre code {
+  background: none;
+  padding: 0;
+}
+.present-body a {
+  color: var(--present-link);
+  border-bottom: 1px solid var(--present-link-line);
+}
+
+/* 呈现模式里的对比图改为浅色 */
+.present-paper .exp {
+  background: transparent;
+  border-bottom: 1px solid var(--present-line);
+  padding: 4px 0 10px;
+  margin-bottom: 8px;
+}
+.present-paper .exp-title,
+.present-paper .exp-sub,
+.present-paper .exp-legend {
+  color: var(--present-muted);
+}
+.present-paper .exp-bars {
+  border-bottom-color: var(--present-line-2);
+}
+.present-paper .exp-val,
+.present-paper .exp-metric {
+  color: var(--present-muted);
+}
+
+@media print {
+  .app > *:not(.present-shell) {
+    display: none !important;
+  }
+  .present-bar {
+    display: none !important;
+  }
+  .present-shell {
+    position: static;
+    background: var(--present-print-bg);
+    padding: 0;
+  }
+  .present-paper {
+    max-width: none;
+    padding: 0;
+  }
+}
+
+.exp-hint {
+  font-size: var(--font-size-sm);
+  color: var(--text-dim);
+  line-height: 1.6;
+  padding: 4px 2px 8px;
+}
+.exp-hint-pre {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font-size: var(--font-size-xs);
+  overflow: auto;
+}
