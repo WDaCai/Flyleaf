@@ -20,6 +20,7 @@ import { MetaPanel } from './components/MetaPanel';
 import { Framework } from './components/Framework';
 import { DrawioCanvas } from './components/DrawioCanvas';
 import { Palette, type PaletteItem } from './components/Palette';
+import { DoodleFolder, DoodleLeaf, DoodlePlus, DoodleSearch, DoodleTrash } from './components/DoodleMarks';
 import { renderMarkdown, WIKI_PREFIX } from './markdown';
 import markdownGuideBody from './help/markdown-guide.md?raw';
 import { toPng } from 'html-to-image';
@@ -1263,6 +1264,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
     return (
       <div className="vault-open">
         <div className="vault-card">
+          <img className="brand-mark" src="/favicon.png" alt="" width={48} height={48} />
           <h1>Flyleaf</h1>
           <p>输入一个文件夹路径作为 vault（不存在会自动创建）</p>
           <input className="input" value={vaultInput} onChange={(e) => setVaultInput(e.target.value)} placeholder="C:\\Users\\你\\Documents\\flyleaf-vault" />
@@ -1283,6 +1285,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
     <div className={`app ${present ? 'present' : ''} ${focusMode ? 'focus-mode' : ''}`}>
       <aside className="sidebar">
         <div className="sidebar-head">
+          <img className="brand-mark" src="/favicon.png" alt="" width={36} height={36} />
           <span className="brand">Flyleaf</span>
           <span className="vault-name">{vault?.name ?? '—'}</span>
           <button
@@ -1298,38 +1301,44 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
         </div>
 
         <div className="sidebar-actions">
-          <button className="btn ghost" onClick={() => setPalette('command')}>
-            <span>+ 新建</span>
+          <button type="button" className="side-item" onClick={() => setPalette('command')}>
+            <DoodlePlus />
+            <span className="side-label">新建</span>
             <kbd>Ctrl+P</kbd>
           </button>
-          <button className="btn ghost" onClick={() => setPalette('search')}>
-            <span>搜索</span>
+          <button type="button" className="side-item" onClick={() => setPalette('search')}>
+            <DoodleSearch />
+            <span className="side-label">搜索</span>
             <kbd>Ctrl+Shift+F</kbd>
           </button>
-          <button className="btn ghost" onClick={() => setFolderDialog({ mode: 'create' })} title="新建或管理文件夹">
-            <span>文件夹</span>
+          <button type="button" className="side-item" onClick={() => setFolderDialog({ mode: 'create' })} title="新建或管理文件夹">
+            <DoodleFolder />
+            <span className="side-label">文件夹</span>
           </button>
           <button
-            className={`btn ghost ${trashOpen ? 'on' : ''}`}
+            type="button"
+            className={`side-item ${trashOpen ? 'on' : ''}`}
             onClick={() => setTrashOpen((v) => !v)}
             title="回收站"
           >
-            <span>回收站</span>
+            <DoodleTrash />
+            <span className="side-label">回收站</span>
           </button>
         </div>
 
         <div className="scratch-panel fw-entry">
           <div className="scratch-panel-head">
             <strong>知识框架</strong>
+            <span className="section-mark" aria-hidden="true" />
             <div className="trash-panel-spacer" />
-            <button type="button" className="btn ghost" title="新建知识框架（大纲，以及 draw.io 画布）" onClick={() => void createFrameworkNote()}>
+            <button type="button" className="section-new" title="新建知识框架（大纲，以及 draw.io 画布）" onClick={() => void createFrameworkNote()}>
               新建
             </button>
           </div>
           {frameworkHits === null ? (
             <div className="side-empty">正在读取框架…</div>
           ) : frameworkHits.length === 0 ? (
-            <div className="side-empty">还没有知识框架。点「新建」，再用大纲或画布整理。</div>
+            <div className="side-empty">点「新建」</div>
           ) : (
             frameworkHits.map((h) => (
               <div key={h.path} className="scratch-row">
@@ -1373,15 +1382,14 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
         <div className="scratch-panel">
           <div className="scratch-panel-head">
             <strong>梳理画布</strong>
+            <span className="section-mark" aria-hidden="true" />
             <div className="trash-panel-spacer" />
-            <button type="button" className="btn ghost" title="新建梳理画布（draw.io，不写笔记）" onClick={() => void createScratchCanvas()}>
+            <button type="button" className="section-new" title="新建梳理画布（draw.io，不写笔记）" onClick={() => void createScratchCanvas()}>
               新建
             </button>
           </div>
           {scratchList.length === 0 ? (
-            <div className="side-empty">
-              随记里点「开梳理画布」，或点这里的「新建」
-            </div>
+            <div className="side-empty">或从随记打开</div>
           ) : (
             scratchList.map((s) => (
               <div key={s.path} className="scratch-row">
@@ -1451,7 +1459,8 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
           </div>
         )}
 
-        <div className="sidebar-foot">
+        <div className="sidebar-foot" title="关窗口进托盘。随记 Ctrl+Alt+Space">
+          <DoodleLeaf />
           <span>{vault?.noteCount ?? 0} 篇</span>
           <span className="dot" />
           {captureFlash ? (
@@ -1464,7 +1473,6 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
             </span>
           )}
         </div>
-        <div className="sidebar-tip">关窗口进托盘，不退出；随记 Ctrl+Alt+Space</div>
       </aside>
 
       <main className="main">
@@ -1566,12 +1574,12 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
           <div key={active ?? 'empty'} className="content-pane">
           {!scratchOpen && !doc && (
             <div className="empty-plain">
-              <div className="empty-card">
+              <div className="empty-watermark" aria-hidden="true" />
               {firstNoteLeaf(tree) ? (
                 <>
                   <div className="empty-plain-title">还没有打开笔记</div>
-                  <div className="empty-plain-copy">从左侧选一篇，或打开第一篇开始。</div>
-                  <button type="button" className="btn primary" onClick={openFirstNote}>
+                  <div className="empty-plain-copy">从左侧选一篇，或打开第一篇。</div>
+                  <button type="button" className="btn doodle" onClick={openFirstNote}>
                     打开第一篇笔记
                   </button>
                 </>
@@ -1579,23 +1587,16 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
                 <>
                   <div className="empty-plain-title">还没有笔记</div>
                   <div className="empty-plain-copy">新建一篇，或用随记热键 Ctrl+Alt+Space 快速记下。</div>
-                  <button type="button" className="btn primary" onClick={() => setPalette('command')}>
+                  <button type="button" className="btn doodle" onClick={() => setPalette('command')}>
                     新建笔记
                   </button>
                 </>
               )}
               {!hasFrameworkNotes && (
-                <>
-                  <div className="empty-plain-title" style={{ marginTop: 28 }}>
-                    还没有知识框架
-                  </div>
-                  <div className="empty-plain-copy">一棵缩进树。大纲读写 Markdown；画布是单独的 draw.io 图，自动存在笔记库里。</div>
-                  <button type="button" className="btn primary" onClick={() => void createFrameworkNote()}>
-                    新建框架笔记
-                  </button>
-                </>
+                <button type="button" className="empty-link" onClick={() => void createFrameworkNote()}>
+                  新建知识框架
+                </button>
               )}
-              </div>
             </div>
           )}
 

@@ -80,6 +80,11 @@
   --editor-active-line: rgba(224, 122, 61, 0.06);
   --editor-selection: rgba(224, 122, 61, 0.22);
   --editor-placeholder: #6e6a63;
+
+  --doodle-ink: #e4dfd6;
+  --doodle-note: #2a2824;
+  --doodle-note-edge: #3d3a34;
+  --doodle-note-ink: #b7b1a6;
 }
 
 [data-theme='light'] {
@@ -161,6 +166,11 @@
   --editor-active-line: rgba(192, 86, 42, 0.07);
   --editor-selection: rgba(192, 86, 42, 0.2);
   --editor-placeholder: #a39b90;
+
+  --doodle-ink: #3c342c;
+  --doodle-note: #f4e7c8;
+  --doodle-note-edge: #e4d3a8;
+  --doodle-note-ink: #5c4630;
 }
 
 :root {
@@ -198,7 +208,7 @@
   --font-size-sm: 12px;
   --font-size-md: 13px;
   --font-size-body: 15px;
-  --sidebar-w: 252px;
+  --sidebar-w: 268px;
   --right-w: 268px;
   --editor-max: 820px;
   --leading-body: 1.7;
