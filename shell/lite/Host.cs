@@ -72,6 +72,13 @@ namespace Flyleaf.Lite
         const int WmHotkey = 0x0312;
         const int WmNclButtonDown = 0xA1;
         const int HtCaption = 2;
+        const int HtLeft = 10;
+        const int HtRight = 11;
+        const int HtTop = 12;
+        const int HtTopLeft = 13;
+        const int HtTopRight = 14;
+        const int HtBottom = 15;
+        const int HtBottomLeft = 16;
         const int HtBottomRight = 17;
         const int ModControl = 0x0002;
         const int ModAlt = 0x0001;
@@ -139,7 +146,9 @@ namespace Flyleaf.Lite
             cardWeb.Dock = DockStyle.Fill;
             card.Controls.Add(cardWeb);
             card.FormClosing += CardClosing;
-            card.ResizeEnd += delegate { ReadCardBounds(); SaveState(); ApplyCardRegion(); };
+            // 圆角区域要跟着变。只在松手时重画的话，拖大的部分被旧区域裁掉，看起来放不大。
+            card.Resize += delegate { ApplyCardRegion(); };
+            card.ResizeEnd += delegate { ReadCardBounds(); SaveState(); };
 
             LoadState();
             BuildTray();
@@ -303,10 +312,10 @@ namespace Flyleaf.Lite
                 ReleaseCapture();
                 SendMessage(card.Handle, WmNclButtonDown, (IntPtr)HtCaption, IntPtr.Zero);
             }
-            else if (msg == "resize")
+            else if (msg == "resize" || (msg != null && msg.StartsWith("resize-")))
             {
                 ReleaseCapture();
-                SendMessage(card.Handle, WmNclButtonDown, (IntPtr)HtBottomRight, IntPtr.Zero);
+                SendMessage(card.Handle, WmNclButtonDown, (IntPtr)HitForCardResize(msg), IntPtr.Zero);
             }
             else if (msg == "show-main")
             {
@@ -400,9 +409,28 @@ namespace Flyleaf.Lite
             if (cardY + cardH > area.Bottom) cardY = area.Bottom - cardH;
         }
 
+        int regionW = -1;
+        int regionH = -1;
+
+        static int HitForCardResize(string msg)
+        {
+            if (msg == "resize-n") return HtTop;
+            if (msg == "resize-s") return HtBottom;
+            if (msg == "resize-w") return HtLeft;
+            if (msg == "resize-e") return HtRight;
+            if (msg == "resize-nw") return HtTopLeft;
+            if (msg == "resize-ne") return HtTopRight;
+            if (msg == "resize-sw") return HtBottomLeft;
+            return HtBottomRight;
+        }
+
         void ApplyCardRegion()
         {
             if (!card.IsHandleCreated) return;
+            if (card.Width < 2 || card.Height < 2) return;
+            if (card.Width == regionW && card.Height == regionH) return;
+            regionW = card.Width;
+            regionH = card.Height;
             IntPtr region = CreateRoundRectRgn(0, 0, card.Width, card.Height, 24, 24);
             card.Region = Region.FromHrgn(region);
         }

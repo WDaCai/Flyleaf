@@ -32,7 +32,9 @@ function hostBridge(): WebViewHost | null {
   return chrome?.webview ?? null;
 }
 
-function postHost(message: 'drag' | 'resize' | 'show-main'): void {
+type CardEdge = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
+
+function postHost(message: 'drag' | 'show-main' | 'resize' | `resize-${CardEdge}`): void {
   hostBridge()?.postMessage(message);
 }
 
@@ -159,7 +161,17 @@ function Card(): React.ReactElement {
           归档
         </button>
       </div>
-      <div className="card-resize" onMouseDown={() => postHost('resize')} />
+      {(['n', 's', 'e', 'w', 'nw', 'ne', 'sw', 'se'] as const).map((edge) => (
+        <div
+          key={edge}
+          className={`card-edge card-edge-${edge}`}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            postHost(edge === 'se' ? 'resize' : `resize-${edge}`);
+          }}
+        />
+      ))}
     </div>
   );
 }
