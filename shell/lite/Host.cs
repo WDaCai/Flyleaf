@@ -258,6 +258,7 @@ namespace Flyleaf.Lite
         {
             CoreWebView2 core = mainWeb.CoreWebView2;
             core.Settings.AreDefaultScriptDialogsEnabled = true;
+            core.Settings.IsZoomControlEnabled = false;
             core.DocumentTitleChanged += delegate { Text = "Flyleaf"; ApplyAppIcon(); };
             mainWeb.NavigationCompleted += delegate(object sender, CoreWebView2NavigationCompletedEventArgs e)
             {
@@ -275,6 +276,7 @@ namespace Flyleaf.Lite
             CoreWebView2 core = cardWeb.CoreWebView2;
             core.Settings.AreDefaultScriptDialogsEnabled = true;
             core.Settings.IsStatusBarEnabled = false;
+            core.Settings.IsZoomControlEnabled = false;
             core.DocumentTitleChanged += delegate { card.Text = "随记"; ApplyAppIcon(); };
             core.WebMessageReceived += CardMessage;
             core.WindowCloseRequested += delegate { HideCard(); };

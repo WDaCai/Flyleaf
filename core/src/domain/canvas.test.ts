@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   canvasPathForFramework,
+  clampCanvasZoom,
   emptyCanvasDoc,
   emptyScratchDoc,
   ghostLayouts,
@@ -9,6 +10,8 @@ import {
   reconcileCanvas,
   scratchPathForId,
   serializeCanvasDoc,
+  wheelZoomFactor,
+  zoomCanvasView,
 } from './canvas';
 
 describe('canvas', () => {
@@ -86,5 +89,23 @@ describe('canvas', () => {
     expect(r.degraded).toBe(false);
     expect(r.doc?.mode).toBe('scratch');
     expect(r.doc?.nodes[0]?.text).toBe('概念');
+  });
+
+  it('缩放锚点下的世界坐标不变', () => {
+    const view = { k: 1, tx: 48, ty: 40 };
+    const px = 400;
+    const py = 300;
+    const worldX = (px - view.tx) / view.k;
+    const worldY = (py - view.ty) / view.k;
+    const next = zoomCanvasView(view, px, py, wheelZoomFactor(-120, 0));
+    expect(next.k).toBeGreaterThan(1);
+    expect(next.k).toBeLessThanOrEqual(4);
+    expect((px - next.tx) / next.k).toBeCloseTo(worldX, 5);
+    expect((py - next.ty) / next.k).toBeCloseTo(worldY, 5);
+    expect(wheelZoomFactor(0)).toBe(1);
+    expect(clampCanvasZoom(99)).toBe(4);
+    expect(clampCanvasZoom(0.01)).toBe(0.2);
+    const parsed = parseCanvasJson(JSON.stringify({ version: 1, viewport: { k: 9, tx: 1, ty: 2 } }), 'a.md');
+    expect(parsed.doc?.viewport.k).toBe(4);
   });
 });

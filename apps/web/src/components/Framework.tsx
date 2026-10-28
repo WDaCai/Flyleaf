@@ -84,8 +84,8 @@ export function Framework({
           <button type="button" className={mode === 'outline' ? 'seg-on' : ''} onClick={() => onModeChange('outline')}>
             大纲
           </button>
-          <button type="button" className={mode === 'mindmap' ? 'seg-on' : ''} onClick={() => onModeChange('mindmap')}>
-            导图
+          <button type="button" className={mode === 'mindmap' ? 'seg-on' : ''} title="自由画布：拖节点、连线、滚轮缩放" onClick={() => onModeChange('mindmap')}>
+            画布
           </button>
         </div>
       </div>
@@ -123,10 +123,12 @@ export function Framework({
         </div>
       ) : (
         <FrameworkCanvas
+          key={framework.path}
           framework={framework}
           collapsed={collapsed}
           onToggle={onToggle}
           onNavigate={onNavigate}
+          onRenameLine={onRenameNode}
           highlightLine={highlightLine}
           onSelectLine={onSelectLine}
           loadCanvas={loadCanvas}

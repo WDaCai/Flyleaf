@@ -66,6 +66,40 @@ const DEFAULT_W = 208;
 const DEFAULT_H = 34;
 const SHAPES = new Set<CanvasShape>(['round', 'rect', 'ellipse']);
 
+/** 画布缩放夹取。过窄会让滚轮一滑就顶死，拖拽也容易贴边。 */
+export const CANVAS_ZOOM_MIN = 0.2;
+export const CANVAS_ZOOM_MAX = 4;
+
+export function clampCanvasZoom(k: number): number {
+  if (!Number.isFinite(k) || k <= 0) return 1;
+  return Math.min(CANVAS_ZOOM_MAX, Math.max(CANVAS_ZOOM_MIN, k));
+}
+
+/**
+ * 以 SVG 视口坐标 (px, py) 为锚缩放，锚点下的世界坐标保持不动。
+ * transform 约定：translate(tx, ty) scale(k)，tx/ty 是视口像素。
+ */
+export function zoomCanvasView(view: CanvasViewport, px: number, py: number, factor: number): CanvasViewport {
+  const prev = view.k > 0 && Number.isFinite(view.k) ? view.k : 1;
+  const nextK = clampCanvasZoom(prev * (Number.isFinite(factor) && factor > 0 ? factor : 1));
+  const ratio = nextK / prev;
+  return {
+    k: nextK,
+    tx: px - (px - view.tx) * ratio,
+    ty: py - (py - view.ty) * ratio,
+  };
+}
+
+/**
+ * 滚轮增量 → 乘性缩放。deltaMode：0 像素、1 行、2 页。
+ * 按像素幅度平滑缩放，避免触控板每一小格都跳 12%。deltaY 为 0 时不缩放。
+ */
+export function wheelZoomFactor(deltaY: number, deltaMode = 0): number {
+  if (!Number.isFinite(deltaY) || deltaY === 0) return 1;
+  const pixels = deltaMode === 1 ? deltaY * 16 : deltaMode === 2 ? deltaY * 400 : deltaY;
+  return Math.exp(-pixels * 0.00115);
+}
+
 /** foo.md → foo.canvas.json */
 export function canvasPathForFramework(frameworkRel: string): string {
   const p = frameworkRel.replace(/\\/g, '/');
@@ -136,7 +170,7 @@ export function parseCanvasJson(raw: string, frameworkPath: string): CanvasLoadR
   }
   const vpIn = o.viewport && typeof o.viewport === 'object' ? (o.viewport as Record<string, unknown>) : {};
   const viewport: CanvasViewport = {
-    k: Math.min(2, Math.max(0.35, num(vpIn.k, 1))),
+    k: clampCanvasZoom(num(vpIn.k, 1)),
     tx: num(vpIn.tx, 48),
     ty: num(vpIn.ty, 48),
   };

@@ -584,6 +584,7 @@ kbd {
 }
 .content-pane > .doc-wrap,
 .content-pane > .fw,
+.content-pane > .scratch-view,
 .content-pane > .empty {
   flex: 1;
   min-height: 0;

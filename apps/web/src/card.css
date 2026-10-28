@@ -88,9 +88,11 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 30px;
-  padding: 0 8px 0 12px;
+  min-height: 32px;
+  height: auto;
+  padding: 4px 8px 4px 12px;
   border-top: 1px solid var(--border-soft);
+  flex-wrap: nowrap;
 }
 .card-status {
   flex: 1;
@@ -101,6 +103,7 @@ body {
   white-space: nowrap;
 }
 .card-btn {
+  flex: none;
   padding: 2px 10px;
   border-radius: var(--radius-sm);
   background: var(--accent-dim);
@@ -155,15 +158,13 @@ body {
 
 .card-btn.ghost {
   background: transparent;
-  border: 1px solid color-mix(in srgb, var(--fg, #e8eaed) 22%, transparent);
-  color: var(--fg, #e8eaed);
-  opacity: 0.9;
+  border: 1px solid var(--border);
+  color: var(--text);
+  opacity: 1;
+  flex: none;
 }
 .card-btn.ghost:hover {
-  opacity: 1;
-  border-color: color-mix(in srgb, var(--fg, #e8eaed) 40%, transparent);
-}
-.card-foot {
-  gap: 8px;
-  flex-wrap: wrap;
+  border-color: var(--text-dim);
+  color: var(--heading);
+  background: var(--panel-2);
 }

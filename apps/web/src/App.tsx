@@ -12,6 +12,7 @@ import type {
   FlyleafClient,
   TrashItem,
   ScratchCanvasSummary,
+  SearchHit,
 } from '@flyleaf/core/contracts';
 import { Editor } from './components/Editor';
 import { ExperimentChart } from './components/ExperimentChart';
@@ -196,6 +197,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
   const [fwMode, setFwMode] = useState<'outline' | 'mindmap'>('outline');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [hasFrameworkNotes, setHasFrameworkNotes] = useState(true);
+  const [frameworkHits, setFrameworkHits] = useState<SearchHit[] | null>(null);
   const fwCollapsePath = useRef<string | null>(null);
   const largeTreeWarned = useRef<string | null>(null);
   const [highlightLine, setHighlightLine] = useState<number | null>(null);
@@ -271,13 +273,16 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
       const next = await client.vault.tree();
       setTree(next);
       try {
-        const hits = await client.search.query({ type: 'framework', limit: 1 });
+        const hits = await client.search.query({ type: 'framework', limit: 40 });
+        setFrameworkHits(hits);
         setHasFrameworkNotes(hits.length > 0 || countFrameworkFiles(next) > 0);
       } catch {
+        setFrameworkHits([]);
         setHasFrameworkNotes(countFrameworkFiles(next) > 0);
       }
     } catch {
       setTree([]);
+      setFrameworkHits([]);
       setHasFrameworkNotes(false);
     }
   }, [client]);
@@ -337,6 +342,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
       pendingRef.current = null;
       setDoc(d);
       setBody(d.body);
+      setScratchOpen(null);
       setActive(path);
       setHighlightLine(null);
       setTabs((prev) => {
@@ -1082,11 +1088,27 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
     ];
     const actions: PaletteItem[] = [
       {
+        id: 'open-framework',
+        label: frameworkHits && frameworkHits.length > 0 ? '打开知识框架' : '新建知识框架',
+        hint: '框架',
+        run: () => {
+          const first = frameworkHits?.[0];
+          if (first) void openPath(first.path);
+          else void createFrameworkNote();
+        },
+      },
+      {
         id: 'new-framework',
         label: '新建框架笔记',
         hint: '框架',
         run: () => void createFrameworkNote(),
       },
+      ...(frameworkHits ?? []).map((h) => ({
+        id: `open-fw-${h.path}`,
+        label: `打开框架：${h.title}`,
+        hint: h.path,
+        run: () => void openPath(h.path),
+      })),
       {
         id: 'markdown-guide',
         label: '打开 Markdown 写法说明',
@@ -1166,7 +1188,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
     };
     walk(tree);
     return [...actions, ...files];
-  }, [active, clearTrash, createNote, createFrameworkNote, flashStatus, focusMode, folders, openMarkdownGuide, openPath, restoreLatest, setEditorWidthPref, setInboxFolder, toggleFocus, trashOpen, tree]);
+  }, [active, clearTrash, createNote, createFrameworkNote, flashStatus, focusMode, folders, frameworkHits, openMarkdownGuide, openPath, restoreLatest, setEditorWidthPref, setInboxFolder, toggleFocus, trashOpen, tree]);
 
   const searchFn = useCallback(
     async (q: string): Promise<PaletteItem[]> => {
@@ -1262,6 +1284,34 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
           </button>
         </div>
 
+        <div className="scratch-panel fw-entry">
+          <div className="scratch-panel-head">
+            <strong>知识框架</strong>
+            <div className="trash-panel-spacer" />
+            <button type="button" className="btn ghost" title="新建知识框架（大纲和画布）" onClick={() => void createFrameworkNote()}>
+              新建
+            </button>
+          </div>
+          {frameworkHits === null ? (
+            <div className="side-empty">正在读取框架…</div>
+          ) : frameworkHits.length === 0 ? (
+            <div className="side-empty">还没有知识框架。点「新建」，再用大纲或画布整理。</div>
+          ) : (
+            frameworkHits.map((h) => (
+              <div key={h.path} className="scratch-row">
+                <button
+                  type="button"
+                  className={`scratch-row-main${active === h.path && !scratchOpen ? ' on' : ''}`}
+                  title={h.path}
+                  onClick={() => void openPath(h.path)}
+                >
+                  <div className="scratch-row-title">{h.title}</div>
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
         <div
           className="tree"
           onClick={() => {
@@ -1295,8 +1345,8 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
             </button>
           </div>
           {scratchList.length === 0 ? (
-            <div className="empty-plain-copy" style={{ fontSize: 12, opacity: 0.65, padding: '4px 6px' }}>
-              随记「开梳理画布」或点新建
+            <div className="side-empty">
+              随记里点「开梳理画布」，或点这里的「新建」
             </div>
           ) : (
             scratchList.map((s) => (
@@ -1528,6 +1578,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
                 </button>
               </div>
               <FrameworkCanvas
+                key={scratchOpen.path}
                 mode="scratch"
                 canvasPath={scratchOpen.path}
                 scratchTitle={scratchOpen.title}

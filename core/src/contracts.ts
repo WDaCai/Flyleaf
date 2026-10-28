@@ -267,6 +267,14 @@ export interface FrameworkCanvasViewport {
   ty: number;
 }
 
+export {
+  CANVAS_ZOOM_MIN,
+  CANVAS_ZOOM_MAX,
+  clampCanvasZoom,
+  zoomCanvasView,
+  wheelZoomFactor,
+} from './domain/canvas';
+
 export interface FrameworkCanvasNode {
   id: string;
   x: number;
