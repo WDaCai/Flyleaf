@@ -1,5 +1,7 @@
 # Flyleaf 浅色新拟物 Chrome 方案
 
+> **已停用，仅留档。** 实现以 `THEME_BLEND_PLAN.md` 为准。不要再启用 `--neu-*` 双光源鼓包、外凸/内凹或卡内套娃。
+
 > 归属：个人（Flyleaf / yan · lite WebView2）  
 > 类型：UI / 体验皮肤（非交互架构重做）  
 > 依据：StyleKit Neumorphism showcase；审核短评两轮；方案撰写 7 条 + 画面分析（默认行平、选中浅凹、正文更平、卡内不套娃）  

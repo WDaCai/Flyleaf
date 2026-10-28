@@ -1231,10 +1231,10 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
           <span className="vault-name">{vault?.name ?? '—'}</span>
           <button
             className="icon-btn theme-toggle"
-            title={theme === 'dark' ? '切换到浅色 · 新拟物' : '切换到深色 · 现有'}
+            title={theme === 'dark' ? '切换到浅色 · 温暖可读' : '切换到深色 · 冷静聚焦'}
             onClick={toggleTheme}
           >
-            {theme === 'dark' ? '浅色 · 新拟物' : '深色 · 现有'}
+            {theme === 'dark' ? '温暖浅色' : '冷静深色'}
           </button>
           <button className="icon-btn" title="刷新文件树" onClick={() => void refreshTree()}>
             刷新
