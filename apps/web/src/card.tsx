@@ -7,11 +7,11 @@ import './card.css';
 const THEME_KEY = 'flyleaf-theme';
 
 function applyStoredTheme(): void {
-  let theme = 'dark';
+  let theme = 'light';
   try {
     const v = localStorage.getItem(THEME_KEY);
     if (v === 'light' || v === 'dark') theme = v;
-    else if (window.matchMedia?.('(prefers-color-scheme: light)').matches) theme = 'light';
+    else if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) theme = 'dark';
   } catch {
     /* ignore */
   }

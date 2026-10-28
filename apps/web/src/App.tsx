@@ -64,10 +64,10 @@ function readStoredTheme(): UiTheme {
   } catch {
     /* ignore */
   }
-  if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: light)').matches) {
-    return 'light';
+  if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
+    return 'dark';
   }
-  return 'dark';
+  return 'light';
 }
 
 function applyTheme(theme: UiTheme): void {
@@ -1231,10 +1231,10 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
           <span className="vault-name">{vault?.name ?? '—'}</span>
           <button
             className="icon-btn theme-toggle"
-            title={theme === 'dark' ? '切换浅色主题' : '切换深色主题'}
+            title={theme === 'dark' ? '切换到浅色 · 新拟物' : '切换到深色 · 现有'}
             onClick={toggleTheme}
           >
-            {theme === 'dark' ? '浅色' : '深色'}
+            {theme === 'dark' ? '浅色 · 新拟物' : '深色 · 现有'}
           </button>
           <button className="icon-btn" title="刷新文件树" onClick={() => void refreshTree()}>
             刷新
@@ -1482,6 +1482,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
           <div key={active ?? 'empty'} className="content-pane">
           {!scratchOpen && !doc && (
             <div className="empty-plain">
+              <div className="empty-card">
               {firstNoteLeaf(tree) ? (
                 <>
                   <div className="empty-plain-title">还没有打开笔记</div>
@@ -1510,6 +1511,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
                   </button>
                 </>
               )}
+              </div>
             </div>
           )}
 

@@ -151,6 +151,16 @@
   --editor-active-line: rgba(181, 111, 69, 0.07);
   --editor-selection: rgba(181, 111, 69, 0.2);
   --editor-placeholder: #a8a296;
+
+  /* 浅色 Chrome 新拟物。仅 light 定义；深色不引用，避免套上 #e0e5ec 双光源。 */
+  --neu-bg: #e0e5ec;
+  --neu-bg-secondary: #d1d9e6;
+  --neu-bg-alt: #f0f0f3;
+  --neu-convex: 8px 8px 16px #b8bcc2, -8px -8px 16px #ffffff;
+  --neu-convex-hover: 4px 4px 8px #b8bcc2, -4px -4px 8px #ffffff;
+  --neu-concave: inset 4px 4px 8px #b8bcc2, inset -4px -4px 8px #ffffff;
+  --neu-concave-deep: inset 8px 8px 16px #b8bcc2, inset -8px -8px 16px #ffffff;
+  --neu-accent: var(--accent);
 }
 
 :root {
@@ -288,6 +298,7 @@ kbd {
     border-color var(--dur-fast) var(--ease-soft),
     background-color var(--dur-fast) var(--ease-soft),
     color var(--dur-fast) var(--ease-soft),
+    box-shadow var(--dur-fast) var(--ease-soft),
     transform var(--dur-fast) var(--ease-soft);
 }
 .btn:hover {
@@ -330,6 +341,7 @@ kbd {
   transition:
     background-color var(--dur-fast) var(--ease-soft),
     color var(--dur-fast) var(--ease-soft),
+    box-shadow var(--dur-fast) var(--ease-soft),
     transform var(--dur-fast) var(--ease-soft);
 }
 .icon-btn:hover {

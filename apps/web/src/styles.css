@@ -44,9 +44,11 @@
 }
 .theme-toggle {
   flex: none;
+  white-space: nowrap;
   transition:
     background-color var(--dur-fast) var(--ease-soft),
     color var(--dur-fast) var(--ease-soft),
+    box-shadow var(--dur-fast) var(--ease-soft),
     transform var(--dur-fast) var(--ease-out);
 }
 .theme-toggle:hover {
@@ -87,6 +89,7 @@
   transition:
     background-color var(--dur-fast) var(--ease-soft),
     color var(--dur-fast) var(--ease-soft),
+    box-shadow var(--dur-mid) var(--ease-soft),
     transform var(--dur-fast) var(--ease-soft);
 }
 .tree-row:hover {
@@ -500,6 +503,10 @@
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--bg);
+  transition:
+    background-color var(--dur-mid) var(--ease-soft),
+    border-color var(--dur-mid) var(--ease-soft),
+    box-shadow var(--dur-mid) var(--ease-soft);
 }
 .seg button {
   padding: 4px 12px;
@@ -508,7 +515,8 @@
   font-family: var(--sans);
   transition:
     background-color var(--dur-fast) var(--ease-soft),
-    color var(--dur-fast) var(--ease-soft);
+    color var(--dur-fast) var(--ease-soft),
+    box-shadow var(--dur-fast) var(--ease-soft);
 }
 .seg button.seg-on {
   background: var(--accent-dim);
@@ -838,6 +846,7 @@
   transition:
     background-color var(--dur-mid) var(--ease-soft),
     border-color var(--dur-mid) var(--ease-soft),
+    box-shadow var(--dur-mid) var(--ease-soft),
     color var(--dur-mid) var(--ease-soft);
 }
 .vault-card h1 {
@@ -1474,4 +1483,250 @@
 .scratch-view .fc-stage {
   flex: 1;
   min-height: 0;
+}
+
+/* 深色下空状态外卡不占盒：子节点仍按 .empty-plain 排布 */
+.empty-card {
+  display: contents;
+}
+
+/* ---------- 浅色 Chrome 新拟物（壳层） ----------
+   只在 light 生效。编辑器、画布舞台/节点、命令结果列表、托盘壳不进这组阴影。
+   深色继续走上面的现有规则。 */
+[data-theme='light'] body,
+[data-theme='light'] .sidebar,
+[data-theme='light'] .tabbar,
+[data-theme='light'] .right,
+[data-theme='light'] .fw-bar,
+[data-theme='light'] .main,
+[data-theme='light'] .sidebar-head,
+[data-theme='light'] .sidebar-actions,
+[data-theme='light'] .sidebar-foot,
+[data-theme='light'] .sidebar-tip,
+[data-theme='light'] .trash-panel,
+[data-theme='light'] .scratch-panel {
+  background-color: var(--neu-bg);
+  border-color: transparent;
+}
+
+/* 正文、大纲列表、画布舞台保持原暖纸底，不跟壳层一起鼓 */
+[data-theme='light'] .main:has(.editor-host),
+[data-theme='light'] .main:has(.preview),
+[data-theme='light'] .main:has(.fw-outline),
+[data-theme='light'] .main:has(.mm-wrap) {
+  background-color: var(--bg);
+}
+
+[data-theme='light'] .app.focus-mode .tabbar {
+  background-color: var(--neu-bg);
+  border-bottom-color: transparent;
+}
+
+[data-theme='light'] .btn.primary {
+  background: var(--neu-bg);
+  color: var(--neu-accent);
+  border: none;
+  border-radius: var(--radius-xl);
+  height: var(--btn-h);
+  padding: 0 16px;
+  box-shadow: var(--neu-convex);
+  filter: none;
+  transform: none;
+}
+[data-theme='light'] .btn.primary:hover {
+  background: var(--neu-bg);
+  color: var(--neu-accent);
+  border-color: transparent;
+  box-shadow: var(--neu-convex-hover);
+  filter: none;
+  transform: none;
+}
+[data-theme='light'] .btn.primary:active {
+  background: var(--neu-bg);
+  color: var(--neu-accent);
+  box-shadow: var(--neu-concave);
+  filter: none;
+  transform: none;
+}
+
+[data-theme='light'] .seg {
+  border: none;
+  overflow: visible;
+  gap: 4px;
+  padding: 4px;
+  background: var(--neu-bg);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--neu-concave);
+}
+[data-theme='light'] .seg button {
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--neu-bg);
+  color: var(--text-dim);
+  box-shadow: var(--neu-convex);
+  transform: none;
+}
+[data-theme='light'] .seg button:hover {
+  background: var(--neu-bg);
+  color: var(--text);
+  box-shadow: var(--neu-convex-hover);
+  transform: none;
+}
+[data-theme='light'] .seg button:active,
+[data-theme='light'] .seg button.seg-on,
+[data-theme='light'] .seg button.seg-on:hover,
+[data-theme='light'] .seg button.seg-on:active {
+  background: var(--neu-bg);
+  color: var(--neu-accent);
+  box-shadow: var(--neu-concave);
+  transform: none;
+}
+
+[data-theme='light'] .sidebar-head .icon-btn,
+[data-theme='light'] .tabbar .icon-btn {
+  background: var(--neu-bg);
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--neu-convex);
+  transform: none;
+}
+[data-theme='light'] .sidebar-head .icon-btn:hover,
+[data-theme='light'] .tabbar .icon-btn:hover,
+[data-theme='light'] .theme-toggle:hover {
+  background: var(--neu-bg);
+  color: var(--text);
+  box-shadow: var(--neu-convex-hover);
+  transform: none;
+}
+[data-theme='light'] .sidebar-head .icon-btn:active,
+[data-theme='light'] .tabbar .icon-btn:active,
+[data-theme='light'] .theme-toggle:active {
+  background: var(--neu-bg);
+  box-shadow: var(--neu-concave);
+  transform: none;
+}
+
+/* 壳层次要按钮只留颜色反馈，避免暖底色块和位移 */
+[data-theme='light'] .sidebar .btn:hover,
+[data-theme='light'] .sidebar .btn:active,
+[data-theme='light'] .tabbar .btn:hover,
+[data-theme='light'] .tabbar .btn:active,
+[data-theme='light'] .fw-bar .btn:hover,
+[data-theme='light'] .fw-bar .btn:active,
+[data-theme='light'] .tab:hover,
+[data-theme='light'] .tab:active {
+  transform: none;
+}
+[data-theme='light'] .sidebar .btn.ghost:hover,
+[data-theme='light'] .tabbar .btn.ghost:hover,
+[data-theme='light'] .fw-bar .btn.ghost:hover {
+  background: color-mix(in srgb, var(--neu-bg-secondary) 45%, var(--neu-bg));
+  color: var(--text);
+}
+[data-theme='light'] .sidebar .btn.ghost.on,
+[data-theme='light'] .sidebar .btn.ghost.on:hover {
+  background: var(--hover-soft);
+  color: var(--heading);
+  box-shadow: none;
+}
+
+/* 侧栏行：未选中平；按下/选中才浅凹。不用 deep inset。
+   file:hover 特异性更高，选中/按下必须写全 file/dir，否则影会被冲掉。 */
+[data-theme='light'] .tree-row,
+[data-theme='light'] .tree-row:hover,
+[data-theme='light'] .tree-row.file:hover,
+[data-theme='light'] .tree-row.dir:hover {
+  background: transparent;
+  box-shadow: none;
+  border-radius: var(--radius-xl);
+  transform: none;
+}
+[data-theme='light'] .tree-row:hover,
+[data-theme='light'] .tree-row.file:hover,
+[data-theme='light'] .tree-row.dir:hover {
+  color: var(--text);
+}
+[data-theme='light'] .tree-row:active,
+[data-theme='light'] .tree-row.file:active,
+[data-theme='light'] .tree-row.dir:active {
+  background: transparent;
+  box-shadow: var(--neu-concave);
+  transform: none;
+}
+[data-theme='light'] .tree-row.on,
+[data-theme='light'] .tree-row.file.on,
+[data-theme='light'] .tree-row.dir.on,
+[data-theme='light'] .tree-row.on:hover,
+[data-theme='light'] .tree-row.file.on:hover,
+[data-theme='light'] .tree-row.dir.on:hover,
+[data-theme='light'] .tree-row.on:active,
+[data-theme='light'] .tree-row.file.on:active,
+[data-theme='light'] .tree-row.dir.on:active {
+  background: transparent;
+  color: var(--heading);
+  font-weight: 600;
+  box-shadow: var(--neu-concave), inset 3px 0 0 var(--accent);
+  transform: none;
+}
+[data-theme='light'] .tree-row.dir.inbox,
+[data-theme='light'] .tree-row.dir.inbox:hover,
+[data-theme='light'] .tree-row.dir.inbox:active {
+  color: var(--accent);
+}
+
+[data-theme='light'] .empty-plain {
+  background: transparent;
+}
+[data-theme='light'] .empty-card {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 12px;
+  width: min(440px, 92%);
+  padding: 36px 32px;
+  background: var(--neu-bg);
+  border: none;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--neu-convex);
+  animation: fl-fade-up var(--dur-mid) var(--ease-soft) both;
+  transition: box-shadow var(--dur-mid) var(--ease-soft);
+}
+[data-theme='light'] .empty-card:hover {
+  box-shadow: var(--neu-convex-hover);
+}
+[data-theme='light'] .empty-card .btn.primary:hover,
+[data-theme='light'] .empty-card .btn.primary:active {
+  transform: scale(0.98);
+}
+
+[data-theme='light'] .vault-open {
+  background: var(--neu-bg);
+}
+[data-theme='light'] .vault-card {
+  background: var(--neu-bg);
+  border: none;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--neu-convex);
+}
+
+/* 豁免区保持平面：命令结果、大纲行、编辑器、画布节点 */
+[data-theme='light'] .palette-row,
+[data-theme='light'] .palette-row.on,
+[data-theme='light'] .fw-row,
+[data-theme='light'] .cm-editor,
+[data-theme='light'] .cm-content,
+[data-theme='light'] .cm-line,
+[data-theme='light'] .mm-node,
+[data-theme='light'] .mm-node-body {
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .empty-card {
+    animation: none !important;
+  }
+  [data-theme='light'] .empty-card .btn.primary:hover,
+  [data-theme='light'] .empty-card .btn.primary:active {
+    transform: none !important;
+  }
 }
