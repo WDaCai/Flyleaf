@@ -7,9 +7,11 @@ import { splitDocument } from '../domain/text';
 import { parseOutline } from '../domain/outline';
 import { buildTree, flattenTree, findNodeByLine } from '../domain/tree';
 import {
+  canvasDocForSave,
   canvasPathForFramework,
-  emptyCanvasDoc,
-  emptyScratchDoc,
+  DRAWIO_XML_MAX,
+  emptyDrawioDoc,
+  isDrawioXml,
   isScratchCanvasPath,
   parseCanvasJson,
   scratchPathForId,
@@ -324,7 +326,7 @@ export class FrameworkService {
     const title =
       (opts?.title && opts.title.trim()) ||
       `梳理 ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    const doc = emptyScratchDoc(title);
+    const doc = emptyDrawioDoc('scratch', '', title);
     await this.repo.write(path, serializeCanvasDoc(doc));
     this.events.emit({ type: 'scratch:changed' });
     this.events.emit({ type: 'scratch:open', path, title: doc.title || title });
@@ -352,27 +354,19 @@ export class FrameworkService {
   async saveScratch(rel: string, doc: FrameworkCanvasDoc): Promise<FrameworkCanvasDoc> {
     const path = rel.replace(/\\/g, '/');
     if (!isScratchCanvasPath(path)) throw new BadRequestError('不是 scratch 画布路径');
-    if (!doc || doc.version !== 1) throw new BadRequestError('画布 version 必须为 1');
-    const normalized: FrameworkCanvasDoc = {
-      ...emptyScratchDoc(doc.title || '梳理画布'),
-      ...doc,
-      version: 1,
-      mode: 'scratch',
-      frameworkPath: '',
-      title: (doc.title || '梳理画布').trim() || '梳理画布',
-      nodes: Array.isArray(doc.nodes) ? doc.nodes : [],
-      edges: Array.isArray(doc.edges) ? doc.edges.filter((e) => e.kind === 'link') : [],
-    };
+    const normalized = this.normalizeCanvas(doc, { mode: 'scratch', frameworkPath: '', title: doc?.title });
+    if (normalized.version === 2) await this.backupReplacedCanvas(path);
     await this.repo.write(path, serializeCanvasDoc(normalized));
     this.events.emit({ type: 'scratch:changed' });
     return normalized;
   }
 
-  /** 只删画布文件，不走笔记 trash，不碰 inbox md */
+  /** 只删画布文件，不走笔记 trash，不碰 inbox md。迁移留下的 .bak 一并去掉。 */
   async deleteScratch(rel: string): Promise<void> {
     const path = rel.replace(/\\/g, '/');
     if (!isScratchCanvasPath(path)) throw new BadRequestError('不是 scratch 画布路径');
     await this.repo.remove(path);
+    await this.repo.remove(`${path}.bak`);
     this.events.emit({ type: 'scratch:changed' });
   }
 
@@ -390,20 +384,42 @@ export class FrameworkService {
   }
 
   async saveCanvas(rel: string, doc: FrameworkCanvasDoc): Promise<FrameworkCanvasDoc> {
-    if (!doc || doc.version !== 1) throw new BadRequestError('画布 version 必须为 1');
     const side = canvasPathForFramework(rel);
-    const normalized: FrameworkCanvasDoc = {
-      ...emptyCanvasDoc(rel),
-      ...doc,
-      version: 1,
-      mode: doc.mode === 'scratch' ? 'scratch' : 'bound',
-      frameworkPath: rel.replace(/\\/g, '/'),
-      nodes: Array.isArray(doc.nodes) ? doc.nodes : [],
-      edges: Array.isArray(doc.edges) ? doc.edges.filter((e) => e.kind === 'link') : [],
-    };
+    const normalized = this.normalizeCanvas(doc, {
+      mode: 'bound',
+      frameworkPath: rel,
+      title: doc?.title,
+    });
+    if (normalized.version === 2) await this.backupReplacedCanvas(side);
     await this.repo.write(side, serializeCanvasDoc(normalized));
     this.events.emit({ type: 'note:changed', path: side });
     return normalized;
+  }
+
+  private normalizeCanvas(
+    doc: FrameworkCanvasDoc,
+    opts: { mode: 'bound' | 'scratch'; frameworkPath: string; title?: string },
+  ): FrameworkCanvasDoc {
+    if (!doc || (doc.version !== 1 && doc.version !== 2)) {
+      throw new BadRequestError('画布 version 必须为 1 或 2');
+    }
+    const normalized = canvasDocForSave(doc, opts);
+    if (normalized.version === 2) {
+      if (!normalized.xml || !isDrawioXml(normalized.xml)) throw new BadRequestError('画布 xml 不是 draw.io 图');
+      if (normalized.xml.length > DRAWIO_XML_MAX) throw new BadRequestError('画布太大，没保存');
+    }
+    return normalized;
+  }
+
+  /** 用 draw.io 覆盖旧节点文件或坏文件之前，把原文复制成同名 .bak，只做一次。 */
+  private async backupReplacedCanvas(rel: string): Promise<void> {
+    if (!(await this.repo.exists(rel))) return;
+    const bak = `${rel}.bak`;
+    if (await this.repo.exists(bak)) return;
+    const prev = await this.repo.read(rel);
+    const parsed = parseCanvasJson(prev.raw, '');
+    if (parsed.doc?.version === 2 && parsed.doc.xml && isDrawioXml(parsed.doc.xml)) return;
+    await this.repo.write(bak, prev.raw);
   }
 
   /** 把 wikilink 目标解析成相对路径：同目录优先 → 全库唯一 → 否则不可解 */

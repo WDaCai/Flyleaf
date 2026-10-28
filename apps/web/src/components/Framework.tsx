@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
-import type { FrameworkTree, Mastery, NavTarget, TreeNode } from '@flyleaf/core/contracts';
+import type { DrawioLabel, FrameworkTree, Mastery, NavTarget, TreeNode } from '@flyleaf/core/contracts';
 import { MASTERY_LABEL, MASTERY_ORDER } from '@flyleaf/core/contracts';
 import { STATE_GLYPH } from '@flyleaf/ui';
-import { FrameworkCanvas } from './FrameworkCanvas';
+import { DrawioCanvas } from './DrawioCanvas';
 import type { FrameworkCanvasDoc, FrameworkCanvasLoadResult } from '@flyleaf/core/contracts';
 
 export interface FrameworkProps {
@@ -20,6 +20,7 @@ export interface FrameworkProps {
   onToggle: (id: string) => void;
   highlightLine: number | null;
   onSelectLine: (line: number | null) => void;
+  theme: 'light' | 'dark';
   loadCanvas: (path: string) => Promise<FrameworkCanvasLoadResult>;
   saveCanvas: (path: string, doc: FrameworkCanvasDoc) => Promise<FrameworkCanvasDoc>;
 }
@@ -27,6 +28,16 @@ export interface FrameworkProps {
 function nextState(state: Mastery): Mastery {
   const i = MASTERY_ORDER.indexOf(state);
   return MASTERY_ORDER[(i + 1) % MASTERY_ORDER.length] ?? 'todo';
+}
+
+function labelsOf(root: TreeNode): DrawioLabel[] {
+  const out: DrawioLabel[] = [];
+  const walk = (n: TreeNode, parentId: string | null): void => {
+    out.push({ id: n.id, text: n.text, parentId });
+    for (const c of n.children) walk(c, n.id);
+  };
+  walk(root, null);
+  return out;
 }
 
 export function Framework({
@@ -44,6 +55,7 @@ export function Framework({
   onToggle,
   highlightLine,
   onSelectLine,
+  theme,
   loadCanvas,
   saveCanvas,
 }: FrameworkProps): React.ReactElement {
@@ -84,7 +96,12 @@ export function Framework({
           <button type="button" className={mode === 'outline' ? 'seg-on' : ''} onClick={() => onModeChange('outline')}>
             大纲
           </button>
-          <button type="button" className={mode === 'mindmap' ? 'seg-on' : ''} title="自由画布：拖节点、连线、滚轮缩放" onClick={() => onModeChange('mindmap')}>
+          <button
+            type="button"
+            className={mode === 'mindmap' ? 'seg-on' : ''}
+            title="画布：整页 draw.io，图自动存进笔记库（Ctrl+M）"
+            onClick={() => onModeChange('mindmap')}
+          >
             画布
           </button>
         </div>
@@ -122,15 +139,13 @@ export function Framework({
           />
         </div>
       ) : (
-        <FrameworkCanvas
+        <DrawioCanvas
           key={framework.path}
-          framework={framework}
-          collapsed={collapsed}
-          onToggle={onToggle}
-          onNavigate={onNavigate}
-          onRenameLine={onRenameNode}
-          highlightLine={highlightLine}
-          onSelectLine={onSelectLine}
+          mode="bound"
+          canvasPath={framework.path}
+          pageName={framework.title}
+          theme={theme}
+          labels={labelsOf(framework.root)}
           loadCanvas={loadCanvas}
           saveCanvas={saveCanvas}
         />

@@ -258,7 +258,9 @@ namespace Flyleaf.Lite
         {
             CoreWebView2 core = mainWeb.CoreWebView2;
             core.Settings.AreDefaultScriptDialogsEnabled = true;
+            // 整页缩放保持关闭。画布是内嵌 draw.io，滚轮和捏合要留给编辑器，不能把 WebView2 页面一起放大。
             core.Settings.IsZoomControlEnabled = false;
+            core.Settings.IsPinchZoomEnabled = false;
             core.DocumentTitleChanged += delegate { Text = "Flyleaf"; ApplyAppIcon(); };
             mainWeb.NavigationCompleted += delegate(object sender, CoreWebView2NavigationCompletedEventArgs e)
             {
@@ -276,7 +278,9 @@ namespace Flyleaf.Lite
             CoreWebView2 core = cardWeb.CoreWebView2;
             core.Settings.AreDefaultScriptDialogsEnabled = true;
             core.Settings.IsStatusBarEnabled = false;
+            // 随记卡同样不放大整页，避免和主窗的缩放策略分叉。
             core.Settings.IsZoomControlEnabled = false;
+            core.Settings.IsPinchZoomEnabled = false;
             core.DocumentTitleChanged += delegate { card.Text = "随记"; ApplyAppIcon(); };
             core.WebMessageReceived += CardMessage;
             core.WindowCloseRequested += delegate { HideCard(); };

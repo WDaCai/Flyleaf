@@ -1,7 +1,9 @@
 # 自由画布（框架导图）· 可执行定稿
 
+> **变更（2026-10-28）**：框架画布和梳理画布的主路径已改为**整页嵌入 diagrams.net（draw.io）**。本文件里「不嵌 diagrams.net」「自研 SVG 当主画布」不再执行，只留作当时的定稿记录。现行依据是 [DRAWIO_EMBED_PLAN.md](./DRAWIO_EMBED_PLAN.md)。大纲仍以框架 Markdown 为真相。
+
 依据：星程拍板（类 draw.io：任意连线、自由拖位置/形状；布局+连线另存）；方案审核短评；美术画面要点；撰写全文。  
-约束：lite / WebView2；**不嵌 diagrams.net**；本刀不做文件增删路径级联同步。
+约束：lite / WebView2；~~不嵌 diagrams.net~~（**已废止**，见文首）；本刀不做文件增删路径级联同步。
 
 ---
 
@@ -147,6 +149,8 @@ HTTP：`GET /api/v1/framework`，`POST .../state|add|rename|remove|shift|expand`
 | `@xyflow/react` | 柄/边现成 | 体积与 API 面；lite 不划算 |
 
 **本刀结论：继续 SVG 自研**，用 `d3-hierarchy` 仅作无 json 时的初始落位。
+
+> 2026-10-28：此结论已废止。主画布改为整页嵌入 draw.io，见 [DRAWIO_EMBED_PLAN.md](./DRAWIO_EMBED_PLAN.md)。
 
 ## 10. 验收（审核 7 条为主）
 

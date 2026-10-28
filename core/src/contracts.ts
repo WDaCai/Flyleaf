@@ -273,7 +273,17 @@ export {
   clampCanvasZoom,
   zoomCanvasView,
   wheelZoomFactor,
+  DRAWIO_XML_MAX,
+  DRAWIO_MIGRATED_NOTICE,
+  emptyDrawioXml,
+  emptyDrawioDoc,
+  isDrawioXml,
+  bootDrawioFromCanvas,
+  migrateCanvasToDrawioXml,
+  canvasDegradedNotice,
 } from './domain/canvas';
+
+export type { DrawioLabel, DrawioBoot, DrawioBootKind } from './domain/canvas';
 
 export interface FrameworkCanvasNode {
   id: string;
@@ -294,9 +304,16 @@ export interface FrameworkCanvasEdge {
   arrow?: boolean;
 }
 
+/** 从 v1 迁入时保留的节点布局 */
+export interface FrameworkCanvasLegacy {
+  nodes: FrameworkCanvasNode[];
+  edges: FrameworkCanvasEdge[];
+}
+
 /** 旁路 foo.canvas.json 或 .yan/scratch/*.flycanvas.json */
 export interface FrameworkCanvasDoc {
-  version: 1;
+  /** 1=旧节点布局；2=draw.io mxfile */
+  version: 1 | 2;
   mode: CanvasMode;
   frameworkPath: string;
   /** scratch 显示名 */
@@ -304,6 +321,10 @@ export interface FrameworkCanvasDoc {
   viewport: FrameworkCanvasViewport;
   nodes: FrameworkCanvasNode[];
   edges: FrameworkCanvasEdge[];
+  /** version 2：diagrams.net mxfile */
+  xml?: string;
+  /** 迁入前的节点和自由边 */
+  legacy?: FrameworkCanvasLegacy;
 }
 
 export interface ScratchCanvasSummary {

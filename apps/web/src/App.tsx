@@ -18,7 +18,7 @@ import { Editor } from './components/Editor';
 import { ExperimentChart } from './components/ExperimentChart';
 import { MetaPanel } from './components/MetaPanel';
 import { Framework } from './components/Framework';
-import { FrameworkCanvas } from './components/FrameworkCanvas';
+import { DrawioCanvas } from './components/DrawioCanvas';
 import { Palette, type PaletteItem } from './components/Palette';
 import { renderMarkdown, WIKI_PREFIX } from './markdown';
 import markdownGuideBody from './help/markdown-guide.md?raw';
@@ -1103,6 +1103,40 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
         hint: '框架',
         run: () => void createFrameworkNote(),
       },
+      ...(framework
+        ? [
+            {
+              id: 'framework-canvas',
+              label: '打开当前框架的画布',
+              hint: 'Ctrl+M · draw.io',
+              run: () => {
+                setScratchOpen(null);
+                setFwMode('mindmap');
+              },
+            },
+            {
+              id: 'framework-outline',
+              label: '打开当前框架的大纲',
+              hint: 'Markdown 大纲',
+              run: () => {
+                setScratchOpen(null);
+                setFwMode('outline');
+              },
+            },
+          ]
+        : []),
+      {
+        id: 'new-scratch',
+        label: '新建梳理画布',
+        hint: '纯梳理 · 不写笔记',
+        run: () => void createScratchCanvas(),
+      },
+      ...scratchList.map((s) => ({
+        id: `open-scratch-${s.path}`,
+        label: `打开梳理画布：${s.title}`,
+        hint: '梳理画布',
+        run: () => openScratchCanvas(s.path, s.title),
+      })),
       ...(frameworkHits ?? []).map((h) => ({
         id: `open-fw-${h.path}`,
         label: `打开框架：${h.title}`,
@@ -1188,7 +1222,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
     };
     walk(tree);
     return [...actions, ...files];
-  }, [active, clearTrash, createNote, createFrameworkNote, flashStatus, focusMode, folders, frameworkHits, openMarkdownGuide, openPath, restoreLatest, setEditorWidthPref, setInboxFolder, toggleFocus, trashOpen, tree]);
+  }, [active, clearTrash, createFrameworkNote, createNote, createScratchCanvas, flashStatus, focusMode, folders, framework, frameworkHits, openMarkdownGuide, openPath, openScratchCanvas, restoreLatest, scratchList, setEditorWidthPref, setInboxFolder, toggleFocus, trashOpen, tree]);
 
   const searchFn = useCallback(
     async (q: string): Promise<PaletteItem[]> => {
@@ -1288,7 +1322,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
           <div className="scratch-panel-head">
             <strong>知识框架</strong>
             <div className="trash-panel-spacer" />
-            <button type="button" className="btn ghost" title="新建知识框架（大纲和画布）" onClick={() => void createFrameworkNote()}>
+            <button type="button" className="btn ghost" title="新建知识框架（大纲，以及 draw.io 画布）" onClick={() => void createFrameworkNote()}>
               新建
             </button>
           </div>
@@ -1340,7 +1374,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
           <div className="scratch-panel-head">
             <strong>梳理画布</strong>
             <div className="trash-panel-spacer" />
-            <button type="button" className="btn ghost" title="新建纯梳理画布（不绑笔记）" onClick={() => void createScratchCanvas()}>
+            <button type="button" className="btn ghost" title="新建梳理画布（draw.io，不写笔记）" onClick={() => void createScratchCanvas()}>
               新建
             </button>
           </div>
@@ -1555,7 +1589,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
                   <div className="empty-plain-title" style={{ marginTop: 28 }}>
                     还没有知识框架
                   </div>
-                  <div className="empty-plain-copy">一棵缩进树，大纲与导图读同一份 Markdown。不超过两步就能建出根和子节点。</div>
+                  <div className="empty-plain-copy">一棵缩进树。大纲读写 Markdown；画布是单独的 draw.io 图，自动存在笔记库里。</div>
                   <button type="button" className="btn primary" onClick={() => void createFrameworkNote()}>
                     新建框架笔记
                   </button>
@@ -1568,7 +1602,16 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
           {scratchOpen && (
             <div className="scratch-view">
               <div className="scratch-view-bar">
-                <span className="scratch-view-title">{scratchOpen.title}</span>
+                <input
+                  className="fc-scratch-title"
+                  aria-label="梳理画布标题"
+                  title="梳理画布标题"
+                  value={scratchOpen.title}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setScratchOpen((prev) => (prev ? { ...prev, title: v } : prev));
+                  }}
+                />
                 <span className="muted" style={{ fontSize: 11, opacity: 0.55 }}>
                   纯梳理 · 不写笔记
                 </span>
@@ -1577,14 +1620,16 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
                   关闭
                 </button>
               </div>
-              <FrameworkCanvas
+              <DrawioCanvas
                 key={scratchOpen.path}
                 mode="scratch"
                 canvasPath={scratchOpen.path}
-                scratchTitle={scratchOpen.title}
-                onScratchTitleChange={(t) => setScratchOpen((prev) => (prev ? { ...prev, title: t } : prev))}
+                pageName={scratchOpen.title}
+                title={scratchOpen.title}
+                theme={theme}
                 loadCanvas={(path) => client.framework.getScratch(path)}
                 saveCanvas={(path, doc) => client.framework.saveScratch(path, doc)}
+                onTitleChange={(t) => setScratchOpen((prev) => (prev ? { ...prev, title: t } : prev))}
               />
             </div>
           )}
@@ -1607,6 +1652,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
               onSelectLine={setHighlightLine}
               loadCanvas={(path) => client.framework.getCanvas(path)}
               saveCanvas={(path, doc) => client.framework.saveCanvas(path, doc)}
+              theme={theme}
             />
           )}
 

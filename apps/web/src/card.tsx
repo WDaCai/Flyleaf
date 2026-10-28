@@ -152,7 +152,7 @@ function Card(): React.ReactElement {
       />
       <div className="card-foot">
         <span className="card-status">{status}</span>
-        <button className="card-btn ghost" type="button" title="纯梳理，不同步笔记" onClick={() => void openScratch()}>
+        <button className="card-btn ghost" type="button" title="打开梳理画布（draw.io，不写笔记）" onClick={() => void openScratch()}>
           开梳理画布
         </button>
         <button className="card-btn" onClick={() => void archive()}>

@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
+  bootDrawioFromCanvas,
+  canvasDegradedNotice,
   canvasPathForFramework,
   clampCanvasZoom,
   emptyCanvasDoc,
+  emptyDrawioDoc,
+  emptyDrawioXml,
   emptyScratchDoc,
   ghostLayouts,
+  isDrawioXml,
   isScratchCanvasPath,
+  migrateCanvasToDrawioXml,
   parseCanvasJson,
   reconcileCanvas,
   scratchPathForId,
@@ -107,5 +113,71 @@ describe('canvas', () => {
     expect(clampCanvasZoom(0.01)).toBe(0.2);
     const parsed = parseCanvasJson(JSON.stringify({ version: 1, viewport: { k: 9, tx: 1, ty: 2 } }), 'a.md');
     expect(parsed.doc?.viewport.k).toBe(4);
+  });
+
+  it('v2 draw.io 往返，并保留 legacy', () => {
+    const xml = emptyDrawioXml('页');
+    expect(isDrawioXml(xml)).toBe(true);
+    const doc = emptyDrawioDoc('scratch', '', '梳理');
+    doc.legacy = {
+      nodes: [{ id: 'a', x: 1, y: 2, w: 80, h: 30, shape: 'ellipse', text: '旧' }],
+      edges: [{ id: 'e1', kind: 'link', from: 'a', to: 'b' }],
+    };
+    const raw = serializeCanvasDoc(doc);
+    expect(raw).toContain('"version": 2');
+    expect(raw).toContain('"format": "drawio"');
+    expect(raw).toContain('<mxfile');
+    const parsed = parseCanvasJson(raw, '');
+    expect(parsed.degraded).toBe(false);
+    expect(parsed.doc?.version).toBe(2);
+    expect(parsed.doc?.mode).toBe('scratch');
+    expect(parsed.doc?.title).toBe('梳理');
+    expect(parsed.doc?.legacy?.nodes[0]?.text).toBe('旧');
+    expect(parsed.doc?.legacy?.edges).toHaveLength(1);
+  });
+
+  it('坏版本与坏 xml 降级', () => {
+    expect(parseCanvasJson(JSON.stringify({ version: 3 }), 'a.md').reason).toBe('bad-version');
+    expect(parseCanvasJson(JSON.stringify({ version: 2, xml: 'hello' }), 'a.md').reason).toBe('bad-xml');
+    expect(canvasDegradedNotice('missing')).toBe('');
+    expect(canvasDegradedNotice('json-parse')).toContain('.bak');
+  });
+
+  it('v1 节点迁成 mxfile：文案、父子边、失效节点', () => {
+    const doc = emptyCanvasDoc('50-frameworks/foo.md');
+    doc.nodes = [
+      { id: 'root', x: 10, y: 20, w: 100, h: 34, shape: 'round' },
+      { id: 'note:a&b', x: 30, y: 40, w: 120, h: 36, shape: 'ellipse', text: '应被大纲盖住' },
+      { id: 'ghost', x: 1, y: 2, w: 90, h: 30, shape: 'rect', text: '游离' },
+    ];
+    doc.edges = [{ id: 'free', kind: 'link', from: 'root', to: 'ghost', arrow: true }];
+    const xml = migrateCanvasToDrawioXml(
+      doc,
+      [
+        { id: 'root', text: '根', parentId: null },
+        { id: 'note:a&b', text: 'A & B', parentId: 'root' },
+      ],
+      '框架',
+    );
+    expect(xml).toContain('value="根"');
+    expect(xml).toContain('value="A &amp; B"');
+    expect(xml).toContain('ellipse;');
+    expect(xml).toContain('（失效）游离');
+    expect(xml).toContain('dashed=1');
+    expect(xml).toContain('endArrow=classic');
+    expect(xml).toContain('source="root"');
+    expect(xml).not.toContain('id="note:a&amp;b"');
+    const boot = bootDrawioFromCanvas(
+      { degraded: false, doc },
+      { labels: [{ id: 'root', text: '根', parentId: null }], pageName: '框架' },
+    );
+    expect(boot.kind).toBe('migrated');
+    expect(boot.notice).toContain('迁入');
+    expect(boot.legacy?.nodes).toHaveLength(3);
+    const emptyBoot = bootDrawioFromCanvas({ degraded: true, doc: null, reason: 'missing' });
+    expect(emptyBoot.kind).toBe('empty');
+    expect(emptyBoot.notice).toBe('');
+    const badBoot = bootDrawioFromCanvas({ degraded: true, doc: null, reason: 'json-parse' });
+    expect(badBoot.kind).toBe('degraded');
   });
 });
