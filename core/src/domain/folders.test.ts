@@ -8,12 +8,16 @@ import {
   validateFolderPath,
   canDeleteFolder,
   pickNextInbox,
+  planFolderRename,
+  foldersAfterDelete,
+  folderIsUnder,
 } from './folders';
 
 describe('folders path', () => {
-  it('接受一层或两层相对路径', () => {
+  it('接受多层相对路径', () => {
     expect(normalizeFolderPath('00-inbox')).toBe('00-inbox');
     expect(normalizeFolderPath('研究/材质')).toBe('研究/材质');
+    expect(normalizeFolderPath('研究/材质/金属')).toBe('研究/材质/金属');
     expect(normalizeFolderPath('./foo')).toBe('foo');
   });
 
@@ -22,7 +26,7 @@ describe('folders path', () => {
     expect(normalizeFolderPath('/abs')).toBeNull();
     expect(normalizeFolderPath('C:/abs')).toBeNull();
     expect(normalizeFolderPath('.yan')).toBeNull();
-    expect(normalizeFolderPath('a/b/c')).toBeNull();
+    expect(normalizeFolderPath('a/b/c/d/e/f/g/h/i')).toBeNull();
     expect(normalizeFolderPath('a<b')).toBeNull();
     expect(validateFolderPath('..')).toMatch(/不合法/);
     expect(validateFolderPath('assets')).toMatch(/系统目录/);
@@ -111,6 +115,32 @@ describe('folders delete policy', () => {
   });
 });
 
+describe('nested folders', () => {
+  const list = [
+    { path: '研究', title: '研究' },
+    { path: '研究/材质', title: '材质' },
+    { path: '笔记', title: '笔记' },
+  ];
+
+  it('重命名父文件夹时子路径跟着改', () => {
+    const planned = planFolderRename(list, '研究', '调研', '调研');
+    expect(planned.ok).toBe(true);
+    if (!planned.ok) return;
+    expect(planned.folders.map((f) => f.path)).toEqual(['调研', '调研/材质', '笔记']);
+    expect(planned.folders[0]?.title).toBe('调研');
+    expect(planned.folders[1]?.title).toBe('材质');
+  });
+
+  it('不能把文件夹移进自己里面', () => {
+    const planned = planFolderRename(list, '研究', '研究/内部');
+    expect(planned.ok).toBe(false);
+  });
+
+  it('删除父文件夹时清单去掉子文件夹', () => {
+    expect(foldersAfterDelete(list, '研究').map((f) => f.path)).toEqual(['笔记']);
+  });
+});
+
 describe('pickNextInbox', () => {
   it('排除正在删除的路径，回落到下一个分类', () => {
     const cfg = normalizeFoldersConfig({
@@ -122,6 +152,20 @@ describe('pickNextInbox', () => {
       ],
     });
     expect(pickNextInbox(cfg, '00-inbox')).toBe('研究');
+  });
+
+  it('不把正在删除的子文件夹选成下一个收件箱', () => {
+    const cfg = normalizeFoldersConfig({
+      version: 1,
+      inbox: '研究',
+      folders: [
+        { path: '研究', title: '研究' },
+        { path: '研究/材质', title: '材质' },
+        { path: '笔记', title: '笔记' },
+      ],
+    });
+    expect(pickNextInbox(cfg, '研究')).toBe('笔记');
+    expect(folderIsUnder('研究/材质', '研究')).toBe(true);
   });
 
   it('没有其他分类时返回 null', () => {

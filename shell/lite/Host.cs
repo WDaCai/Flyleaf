@@ -72,6 +72,13 @@ namespace Flyleaf.Lite
         const int WmHotkey = 0x0312;
         const int WmNclButtonDown = 0xA1;
         const int HtCaption = 2;
+        const int HtLeft = 10;
+        const int HtRight = 11;
+        const int HtTop = 12;
+        const int HtTopLeft = 13;
+        const int HtTopRight = 14;
+        const int HtBottom = 15;
+        const int HtBottomLeft = 16;
         const int HtBottomRight = 17;
         const int ModControl = 0x0002;
         const int ModAlt = 0x0001;
@@ -139,7 +146,9 @@ namespace Flyleaf.Lite
             cardWeb.Dock = DockStyle.Fill;
             card.Controls.Add(cardWeb);
             card.FormClosing += CardClosing;
-            card.ResizeEnd += delegate { ReadCardBounds(); SaveState(); ApplyCardRegion(); };
+            // 圆角区域要跟着变。只在松手时重画的话，拖大的部分被旧区域裁掉，看起来放不大。
+            card.Resize += delegate { ApplyCardRegion(); };
+            card.ResizeEnd += delegate { ReadCardBounds(); SaveState(); };
 
             LoadState();
             BuildTray();
@@ -258,6 +267,9 @@ namespace Flyleaf.Lite
         {
             CoreWebView2 core = mainWeb.CoreWebView2;
             core.Settings.AreDefaultScriptDialogsEnabled = true;
+            // 整页缩放保持关闭。画布是内嵌 draw.io，滚轮和捏合要留给编辑器，不能把 WebView2 页面一起放大。
+            core.Settings.IsZoomControlEnabled = false;
+            core.Settings.IsPinchZoomEnabled = false;
             core.DocumentTitleChanged += delegate { Text = "Flyleaf"; ApplyAppIcon(); };
             mainWeb.NavigationCompleted += delegate(object sender, CoreWebView2NavigationCompletedEventArgs e)
             {
@@ -275,6 +287,9 @@ namespace Flyleaf.Lite
             CoreWebView2 core = cardWeb.CoreWebView2;
             core.Settings.AreDefaultScriptDialogsEnabled = true;
             core.Settings.IsStatusBarEnabled = false;
+            // 随记卡同样不放大整页，避免和主窗的缩放策略分叉。
+            core.Settings.IsZoomControlEnabled = false;
+            core.Settings.IsPinchZoomEnabled = false;
             core.DocumentTitleChanged += delegate { card.Text = "随记"; ApplyAppIcon(); };
             core.WebMessageReceived += CardMessage;
             core.WindowCloseRequested += delegate { HideCard(); };
@@ -297,10 +312,10 @@ namespace Flyleaf.Lite
                 ReleaseCapture();
                 SendMessage(card.Handle, WmNclButtonDown, (IntPtr)HtCaption, IntPtr.Zero);
             }
-            else if (msg == "resize")
+            else if (msg == "resize" || (msg != null && msg.StartsWith("resize-")))
             {
                 ReleaseCapture();
-                SendMessage(card.Handle, WmNclButtonDown, (IntPtr)HtBottomRight, IntPtr.Zero);
+                SendMessage(card.Handle, WmNclButtonDown, (IntPtr)HitForCardResize(msg), IntPtr.Zero);
             }
             else if (msg == "show-main")
             {
@@ -394,9 +409,28 @@ namespace Flyleaf.Lite
             if (cardY + cardH > area.Bottom) cardY = area.Bottom - cardH;
         }
 
+        int regionW = -1;
+        int regionH = -1;
+
+        static int HitForCardResize(string msg)
+        {
+            if (msg == "resize-n") return HtTop;
+            if (msg == "resize-s") return HtBottom;
+            if (msg == "resize-w") return HtLeft;
+            if (msg == "resize-e") return HtRight;
+            if (msg == "resize-nw") return HtTopLeft;
+            if (msg == "resize-ne") return HtTopRight;
+            if (msg == "resize-sw") return HtBottomLeft;
+            return HtBottomRight;
+        }
+
         void ApplyCardRegion()
         {
             if (!card.IsHandleCreated) return;
+            if (card.Width < 2 || card.Height < 2) return;
+            if (card.Width == regionW && card.Height == regionH) return;
+            regionW = card.Width;
+            regionH = card.Height;
             IntPtr region = CreateRoundRectRgn(0, 0, card.Width, card.Height, 24, 24);
             card.Region = Region.FromHrgn(region);
         }

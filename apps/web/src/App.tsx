@@ -12,13 +12,15 @@ import type {
   FlyleafClient,
   TrashItem,
   ScratchCanvasSummary,
+  SearchHit,
 } from '@flyleaf/core/contracts';
 import { Editor } from './components/Editor';
 import { ExperimentChart } from './components/ExperimentChart';
 import { MetaPanel } from './components/MetaPanel';
 import { Framework } from './components/Framework';
-import { FrameworkCanvas } from './components/FrameworkCanvas';
+import { DrawioCanvas } from './components/DrawioCanvas';
 import { Palette, type PaletteItem } from './components/Palette';
+import { DoodleFolder, DoodleLeaf, DoodlePlus, DoodleSearch, DoodleTrash } from './components/DoodleMarks';
 import { renderMarkdown, WIKI_PREFIX } from './markdown';
 import markdownGuideBody from './help/markdown-guide.md?raw';
 import { toPng } from 'html-to-image';
@@ -64,10 +66,10 @@ function readStoredTheme(): UiTheme {
   } catch {
     /* ignore */
   }
-  if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: light)').matches) {
-    return 'light';
+  if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
+    return 'dark';
   }
-  return 'dark';
+  return 'light';
 }
 
 function applyTheme(theme: UiTheme): void {
@@ -196,6 +198,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
   const [fwMode, setFwMode] = useState<'outline' | 'mindmap'>('outline');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [hasFrameworkNotes, setHasFrameworkNotes] = useState(true);
+  const [frameworkHits, setFrameworkHits] = useState<SearchHit[] | null>(null);
   const fwCollapsePath = useRef<string | null>(null);
   const largeTreeWarned = useRef<string | null>(null);
   const [highlightLine, setHighlightLine] = useState<number | null>(null);
@@ -208,8 +211,12 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
   const [scratchOpen, setScratchOpen] = useState<{ path: string; title: string } | null>(null);
   const [folders, setFolders] = useState<FoldersConfig | null>(null);
   const [folderDialog, setFolderDialog] = useState<
-    null | { mode: 'create' } | { mode: 'rename'; path: string; title: string } | { mode: 'manage' }
+    | null
+    | { mode: 'create'; parent?: string }
+    | { mode: 'rename'; path: string; title: string }
+    | { mode: 'manage' }
   >(null);
+  const [revealDir, setRevealDir] = useState<string | null>(null);
   const [dirMenu, setDirMenu] = useState<{ path: string; x: number; y: number } | null>(null);
   const [fileMenu, setFileMenu] = useState<{ path: string; x: number; y: number } | null>(null);
   const [theme, setTheme] = useState<UiTheme>(() => {
@@ -271,13 +278,21 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
       const next = await client.vault.tree();
       setTree(next);
       try {
-        const hits = await client.search.query({ type: 'framework', limit: 1 });
+        setFolders(await client.vault.listFolders());
+      } catch {
+        /* 树已更新；清单失败时保留上一次 */
+      }
+      try {
+        const hits = await client.search.query({ type: 'framework', limit: 40 });
+        setFrameworkHits(hits);
         setHasFrameworkNotes(hits.length > 0 || countFrameworkFiles(next) > 0);
       } catch {
+        setFrameworkHits([]);
         setHasFrameworkNotes(countFrameworkFiles(next) > 0);
       }
     } catch {
       setTree([]);
+      setFrameworkHits([]);
       setHasFrameworkNotes(false);
     }
   }, [client]);
@@ -337,6 +352,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
       pendingRef.current = null;
       setDoc(d);
       setBody(d.body);
+      setScratchOpen(null);
       setActive(path);
       setHighlightLine(null);
       setTabs((prev) => {
@@ -424,18 +440,23 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
   );
 
   const createFolder = useCallback(
-    async (title: string, pathInput: string): Promise<void> => {
-      const path = sanitizeFolderPathInput(pathInput || title);
+    async (title: string, pathInput: string, parent?: string): Promise<void> => {
+      let path = sanitizeFolderPathInput(pathInput || title);
+      if (parent) {
+        const seg = path.split('/').filter(Boolean).pop() ?? '';
+        path = seg ? `${parent}/${seg}` : '';
+      }
       if (!path) {
         setStatus('请填写目录名');
         return;
       }
       try {
-        const next = await client.vault.createFolder({ path, title: title.trim() || path });
+        const next = await client.vault.createFolder({ path, title: title.trim() || path.split('/').pop() || path });
         setFolders(next);
+        setRevealDir(path);
         await refreshTree();
         setFolderDialog(null);
-        setStatus(`已建文件夹 ${path}`);
+        setStatus(parent ? `已在「${parent}」下建子文件夹 ${path}` : `已建文件夹 ${path}`);
       } catch (e) {
         const err = e as { message?: string };
         setStatus(`新建文件夹失败：${err.message ?? '未知错误'}`);
@@ -468,7 +489,9 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
   const deleteFolder = useCallback(
     async (path: string): Promise<void> => {
       const ok = window.confirm(`删除文件夹「${path}」？
-空目录可删；有内容则拒绝（不会清笔记）。
+空目录可删。里面若有子文件夹或笔记，会先拒绝。
+确认后才会整夹删除（笔记不进回收站）。
+单篇笔记仍请用文件上的「删除（进回收站）」。
 若正用作收件箱且还有其他分类，会自动把收件箱迁过去。`);
       if (!ok) return;
       try {
@@ -482,7 +505,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
         if (msg.includes('非空')) {
           const force = window.confirm(`${msg}
 
-确定要连同里面的笔记一起删除吗？此操作不可恢复。`);
+确定连同里面的子文件夹和笔记一起删除吗？这些笔记不进回收站，且不可恢复。`);
           if (!force) {
             setStatus('已取消删除');
             return;
@@ -1082,11 +1105,61 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
     ];
     const actions: PaletteItem[] = [
       {
+        id: 'open-framework',
+        label: frameworkHits && frameworkHits.length > 0 ? '打开知识框架' : '新建知识框架',
+        hint: '框架',
+        run: () => {
+          const first = frameworkHits?.[0];
+          if (first) void openPath(first.path);
+          else void createFrameworkNote();
+        },
+      },
+      {
         id: 'new-framework',
         label: '新建框架笔记',
         hint: '框架',
         run: () => void createFrameworkNote(),
       },
+      ...(framework
+        ? [
+            {
+              id: 'framework-canvas',
+              label: '打开当前框架的画布',
+              hint: 'Ctrl+M · draw.io',
+              run: () => {
+                setScratchOpen(null);
+                setFwMode('mindmap');
+              },
+            },
+            {
+              id: 'framework-outline',
+              label: '打开当前框架的大纲',
+              hint: 'Markdown 大纲',
+              run: () => {
+                setScratchOpen(null);
+                setFwMode('outline');
+              },
+            },
+          ]
+        : []),
+      {
+        id: 'new-scratch',
+        label: '新建梳理画布',
+        hint: '纯梳理 · 不写笔记',
+        run: () => void createScratchCanvas(),
+      },
+      ...scratchList.map((s) => ({
+        id: `open-scratch-${s.path}`,
+        label: `打开梳理画布：${s.title}`,
+        hint: '梳理画布',
+        run: () => openScratchCanvas(s.path, s.title),
+      })),
+      ...(frameworkHits ?? []).map((h) => ({
+        id: `open-fw-${h.path}`,
+        label: `打开框架：${h.title}`,
+        hint: h.path,
+        run: () => void openPath(h.path),
+      })),
       {
         id: 'markdown-guide',
         label: '打开 Markdown 写法说明',
@@ -1166,7 +1239,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
     };
     walk(tree);
     return [...actions, ...files];
-  }, [active, clearTrash, createNote, createFrameworkNote, flashStatus, focusMode, folders, openMarkdownGuide, openPath, restoreLatest, setEditorWidthPref, setInboxFolder, toggleFocus, trashOpen, tree]);
+  }, [active, clearTrash, createFrameworkNote, createNote, createScratchCanvas, flashStatus, focusMode, folders, framework, frameworkHits, openMarkdownGuide, openPath, openScratchCanvas, restoreLatest, scratchList, setEditorWidthPref, setInboxFolder, toggleFocus, trashOpen, tree]);
 
   const searchFn = useCallback(
     async (q: string): Promise<PaletteItem[]> => {
@@ -1207,6 +1280,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
     return (
       <div className="vault-open">
         <div className="vault-card">
+          <img className="brand-mark" src="/favicon.png" alt="" width={48} height={48} />
           <h1>Flyleaf</h1>
           <p>输入一个文件夹路径作为 vault（不存在会自动创建）</p>
           <input className="input" value={vaultInput} onChange={(e) => setVaultInput(e.target.value)} placeholder="C:\\Users\\你\\Documents\\flyleaf-vault" />
@@ -1227,14 +1301,15 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
     <div className={`app ${present ? 'present' : ''} ${focusMode ? 'focus-mode' : ''}`}>
       <aside className="sidebar">
         <div className="sidebar-head">
+          <img className="brand-mark" src="/favicon.png" alt="" width={36} height={36} />
           <span className="brand">Flyleaf</span>
-          <span className="vault-name">{vault?.name ?? '—'}</span>
+          <span className="vault-name" title={vault?.name ?? ''}>{vault?.name ?? '—'}</span>
           <button
             className="icon-btn theme-toggle"
-            title={theme === 'dark' ? '切换浅色主题' : '切换深色主题'}
+            title={theme === 'dark' ? '切换到浅色 · 温暖可读' : '切换到深色 · 冷静聚焦'}
             onClick={toggleTheme}
           >
-            {theme === 'dark' ? '浅色' : '深色'}
+            {theme === 'dark' ? '温暖浅色' : '冷静深色'}
           </button>
           <button className="icon-btn" title="刷新文件树" onClick={() => void refreshTree()}>
             刷新
@@ -1242,24 +1317,58 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
         </div>
 
         <div className="sidebar-actions">
-          <button className="btn ghost" onClick={() => setPalette('command')}>
-            <span>+ 新建</span>
+          <button type="button" className="side-item" onClick={() => setPalette('command')}>
+            <DoodlePlus />
+            <span className="side-label">新建</span>
             <kbd>Ctrl+P</kbd>
           </button>
-          <button className="btn ghost" onClick={() => setPalette('search')}>
-            <span>搜索</span>
+          <button type="button" className="side-item" onClick={() => setPalette('search')}>
+            <DoodleSearch />
+            <span className="side-label">搜索</span>
             <kbd>Ctrl+Shift+F</kbd>
           </button>
-          <button className="btn ghost" onClick={() => setFolderDialog({ mode: 'create' })} title="新建或管理文件夹">
-            <span>文件夹</span>
+          <button type="button" className="side-item" onClick={() => setFolderDialog({ mode: 'create' })} title="新建或管理文件夹">
+            <DoodleFolder />
+            <span className="side-label">文件夹</span>
           </button>
           <button
-            className={`btn ghost ${trashOpen ? 'on' : ''}`}
+            type="button"
+            className={`side-item ${trashOpen ? 'on' : ''}`}
             onClick={() => setTrashOpen((v) => !v)}
             title="回收站"
           >
-            <span>回收站</span>
+            <DoodleTrash />
+            <span className="side-label">回收站</span>
           </button>
+        </div>
+
+        <div className="scratch-panel fw-entry">
+          <div className="scratch-panel-head">
+            <strong>知识框架</strong>
+            <span className="section-mark" aria-hidden="true" />
+            <div className="trash-panel-spacer" />
+            <button type="button" className="section-new" title="新建知识框架（大纲，以及 draw.io 画布）" onClick={() => void createFrameworkNote()}>
+              新建
+            </button>
+          </div>
+          {frameworkHits === null ? (
+            <div className="side-empty">正在读取框架…</div>
+          ) : frameworkHits.length === 0 ? (
+            <div className="side-empty">点「新建」</div>
+          ) : (
+            frameworkHits.map((h) => (
+              <div key={h.path} className="scratch-row">
+                <button
+                  type="button"
+                  className={`scratch-row-main${active === h.path && !scratchOpen ? ' on' : ''}`}
+                  title={h.path}
+                  onClick={() => void openPath(h.path)}
+                >
+                  <div className="scratch-row-title">{h.title}</div>
+                </button>
+              </div>
+            ))
+          )}
         </div>
 
         <div
@@ -1273,8 +1382,10 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
             nodes={tree}
             activePath={active}
             inboxPath={folders?.inbox ?? null}
+            revealPath={revealDir}
             onOpen={(p) => void openPath(p)}
             onCreateIn={(dir) => void createNote('note', dir)}
+            onCreateSubfolder={(dir) => setFolderDialog({ mode: 'create', parent: dir })}
             onDirMenu={(path, x, y) => {
               setFileMenu(null);
               setDirMenu({ path, x, y });
@@ -1289,15 +1400,14 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
         <div className="scratch-panel">
           <div className="scratch-panel-head">
             <strong>梳理画布</strong>
+            <span className="section-mark" aria-hidden="true" />
             <div className="trash-panel-spacer" />
-            <button type="button" className="btn ghost" title="新建纯梳理画布（不绑笔记）" onClick={() => void createScratchCanvas()}>
+            <button type="button" className="section-new" title="新建梳理画布（draw.io，不写笔记）" onClick={() => void createScratchCanvas()}>
               新建
             </button>
           </div>
           {scratchList.length === 0 ? (
-            <div className="empty-plain-copy" style={{ fontSize: 12, opacity: 0.65, padding: '4px 6px' }}>
-              随记「开梳理画布」或点新建
-            </div>
+            <div className="side-empty">或从随记打开</div>
           ) : (
             scratchList.map((s) => (
               <div key={s.path} className="scratch-row">
@@ -1367,7 +1477,8 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
           </div>
         )}
 
-        <div className="sidebar-foot">
+        <div className="sidebar-foot" title="关窗口进托盘。随记 Ctrl+Alt+Space">
+          <DoodleLeaf />
           <span>{vault?.noteCount ?? 0} 篇</span>
           <span className="dot" />
           {captureFlash ? (
@@ -1380,7 +1491,6 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
             </span>
           )}
         </div>
-        <div className="sidebar-tip">关窗口进托盘，不退出；随记 Ctrl+Alt+Space</div>
       </aside>
 
       <main className="main">
@@ -1482,11 +1592,12 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
           <div key={active ?? 'empty'} className="content-pane">
           {!scratchOpen && !doc && (
             <div className="empty-plain">
+              <div className="empty-watermark" aria-hidden="true" />
               {firstNoteLeaf(tree) ? (
                 <>
                   <div className="empty-plain-title">还没有打开笔记</div>
-                  <div className="empty-plain-copy">从左侧选一篇，或打开第一篇开始。</div>
-                  <button type="button" className="btn primary" onClick={openFirstNote}>
+                  <div className="empty-plain-copy">从左侧选一篇，或打开第一篇。</div>
+                  <button type="button" className="btn doodle" onClick={openFirstNote}>
                     打开第一篇笔记
                   </button>
                 </>
@@ -1494,21 +1605,15 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
                 <>
                   <div className="empty-plain-title">还没有笔记</div>
                   <div className="empty-plain-copy">新建一篇，或用随记热键 Ctrl+Alt+Space 快速记下。</div>
-                  <button type="button" className="btn primary" onClick={() => setPalette('command')}>
+                  <button type="button" className="btn doodle" onClick={() => setPalette('command')}>
                     新建笔记
                   </button>
                 </>
               )}
               {!hasFrameworkNotes && (
-                <>
-                  <div className="empty-plain-title" style={{ marginTop: 28 }}>
-                    还没有知识框架
-                  </div>
-                  <div className="empty-plain-copy">一棵缩进树，大纲与导图读同一份 Markdown。不超过两步就能建出根和子节点。</div>
-                  <button type="button" className="btn primary" onClick={() => void createFrameworkNote()}>
-                    新建框架笔记
-                  </button>
-                </>
+                <button type="button" className="empty-link" onClick={() => void createFrameworkNote()}>
+                  新建知识框架
+                </button>
               )}
             </div>
           )}
@@ -1516,7 +1621,16 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
           {scratchOpen && (
             <div className="scratch-view">
               <div className="scratch-view-bar">
-                <span className="scratch-view-title">{scratchOpen.title}</span>
+                <input
+                  className="fc-scratch-title"
+                  aria-label="梳理画布标题"
+                  title="梳理画布标题"
+                  value={scratchOpen.title}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setScratchOpen((prev) => (prev ? { ...prev, title: v } : prev));
+                  }}
+                />
                 <span className="muted" style={{ fontSize: 11, opacity: 0.55 }}>
                   纯梳理 · 不写笔记
                 </span>
@@ -1525,13 +1639,16 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
                   关闭
                 </button>
               </div>
-              <FrameworkCanvas
+              <DrawioCanvas
+                key={scratchOpen.path}
                 mode="scratch"
                 canvasPath={scratchOpen.path}
-                scratchTitle={scratchOpen.title}
-                onScratchTitleChange={(t) => setScratchOpen((prev) => (prev ? { ...prev, title: t } : prev))}
+                pageName={scratchOpen.title}
+                title={scratchOpen.title}
+                theme={theme}
                 loadCanvas={(path) => client.framework.getScratch(path)}
                 saveCanvas={(path, doc) => client.framework.saveScratch(path, doc)}
+                onTitleChange={(t) => setScratchOpen((prev) => (prev ? { ...prev, title: t } : prev))}
               />
             </div>
           )}
@@ -1554,6 +1671,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
               onSelectLine={setHighlightLine}
               loadCanvas={(path) => client.framework.getCanvas(path)}
               saveCanvas={(path, doc) => client.framework.saveCanvas(path, doc)}
+              theme={theme}
             />
           )}
 
@@ -1667,12 +1785,20 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
 
       {folderDialog && (
         <FolderDialog
-          key={folderDialog.mode === 'rename' ? `rename:${folderDialog.path}` : folderDialog.mode}
+          key={
+            folderDialog.mode === 'rename'
+              ? `rename:${folderDialog.path}`
+              : folderDialog.mode === 'create'
+                ? `create:${folderDialog.parent ?? ''}`
+                : 'manage'
+          }
           state={folderDialog}
           folders={folders}
           inbox={folders?.inbox ?? '00-inbox'}
           onClose={() => setFolderDialog(null)}
-          onCreate={(title, path) => void createFolder(title, path)}
+          onCreate={(title, path) =>
+            void createFolder(title, path, folderDialog.mode === 'create' ? folderDialog.parent : undefined)
+          }
           onRename={(from, to, title) => void renameFolder(from, to, title)}
           onDelete={(path) => void deleteFolder(path)}
           onSetInbox={(path) => void setInboxFolder(path)}
@@ -1688,6 +1814,16 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
             style={{ left: dirMenu.x, top: dirMenu.y }}
             onClick={(e) => e.stopPropagation()}
           >
+            <button
+              type="button"
+              onClick={() => {
+                const parent = dirMenu.path;
+                setDirMenu(null);
+                setFolderDialog({ mode: 'create', parent });
+              }}
+            >
+              新建子文件夹
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -1762,7 +1898,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
             </button>
             <div className="dir-menu-sep" />
             <div className="dir-menu-label">移动到</div>
-            {(folders?.folders ?? []).map((f) => (
+            {flattenDirs(tree).map((f) => (
               <button
                 key={f.path}
                 type="button"
@@ -1772,7 +1908,8 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
                   void moveNote(p, f.path);
                 }}
               >
-                {f.title}
+                {'　'.repeat(f.depth)}
+                {f.name}
                 {folders?.inbox === f.path ? ' · 收件箱' : ''}
               </button>
             ))}
@@ -1784,20 +1921,34 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
 }
 
 
+function flattenDirs(nodes: FileNode[], depth = 0): Array<{ path: string; name: string; depth: number }> {
+  const out: Array<{ path: string; name: string; depth: number }> = [];
+  for (const n of nodes) {
+    if (n.kind !== 'dir') continue;
+    out.push({ path: n.path, name: n.name, depth });
+    if (n.children?.length) out.push(...flattenDirs(n.children, depth + 1));
+  }
+  return out;
+}
+
 function TreeView({
   nodes,
   activePath,
   inboxPath,
+  revealPath,
   onOpen,
   onCreateIn,
+  onCreateSubfolder,
   onDirMenu,
   onFileMenu,
 }: {
   nodes: FileNode[];
   activePath: string | null;
   inboxPath?: string | null;
+  revealPath?: string | null;
   onOpen: (path: string) => void;
   onCreateIn?: (dir: string) => void;
+  onCreateSubfolder?: (dir: string) => void;
   onDirMenu?: (path: string, x: number, y: number) => void;
   onFileMenu?: (path: string, x: number, y: number) => void;
 }): React.ReactElement {
@@ -1819,6 +1970,16 @@ function TreeView({
       return changed ? next : prev;
     });
   }, [nodes]);
+
+  useEffect(() => {
+    if (!revealPath) return;
+    const parts = revealPath.split('/').filter(Boolean);
+    setOpen((prev) => {
+      const next = new Set(prev);
+      for (let i = 1; i <= parts.length; i += 1) next.add(parts.slice(0, i).join('/'));
+      return next;
+    });
+  }, [revealPath]);
 
   const toggle = (p: string): void => {
     userTouched.current.add(p);
@@ -1856,16 +2017,28 @@ function TreeView({
             {expanded && empty && (
               <div className="tree-empty" style={{ paddingLeft: (depth + 1) * 14 + 20 }}>
                 <span className="tree-empty-copy">此文件夹是空的</span>
-                <button
-                  type="button"
-                  className="btn ghost tree-empty-cta"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onCreateIn?.(n.path);
-                  }}
-                >
-                  在此新建
-                </button>
+                <span className="tree-empty-actions">
+                  <button
+                    type="button"
+                    className="btn ghost tree-empty-cta"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCreateSubfolder?.(n.path);
+                    }}
+                  >
+                    子文件夹
+                  </button>
+                  <button
+                    type="button"
+                    className="btn ghost tree-empty-cta"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCreateIn?.(n.path);
+                    }}
+                  >
+                    在此新建
+                  </button>
+                </span>
               </div>
             )}
             {expanded && !empty && render(kids, depth + 1)}
@@ -1912,7 +2085,7 @@ function FolderDialog({
   onOpenCreate,
   onOpenRename,
 }: {
-  state: { mode: 'create' } | { mode: 'rename'; path: string; title: string } | { mode: 'manage' };
+  state: { mode: 'create'; parent?: string } | { mode: 'rename'; path: string; title: string } | { mode: 'manage' };
   folders: FoldersConfig | null;
   inbox: string;
   onClose: () => void;
@@ -1949,8 +2122,10 @@ function FolderDialog({
               随记收件箱：<code>{inbox}</code>。也可在侧栏文件夹上右键操作。
             </p>
             <ul className="folder-list">
-              {(folders?.folders ?? []).map((f) => (
-                <li key={f.path}>
+              {[...(folders?.folders ?? [])]
+                .sort((a, b) => a.path.localeCompare(b.path, 'zh-Hans-CN'))
+                .map((f) => (
+                <li key={f.path} style={{ paddingLeft: (f.path.split('/').length - 1) * 14 }}>
                   <div className="folder-list-main">
                     <span className="folder-list-title">{f.title}</span>
                     <code>{f.path}</code>
@@ -1982,7 +2157,9 @@ function FolderDialog({
         ) : (
           <>
             <div className="folder-modal-head">
-              <strong>{state.mode === 'create' ? '新建文件夹' : '重命名文件夹'}</strong>
+              <strong>
+                {state.mode === 'rename' ? '重命名文件夹' : state.parent ? '新建子文件夹' : '新建文件夹'}
+              </strong>
               <button type="button" className="icon-btn" onClick={onClose}>
                 关闭
               </button>
@@ -1997,17 +2174,25 @@ function FolderDialog({
               />
             </label>
             <label className="folder-field">
-              <span>目录名（相对库，一层或两层）</span>
+              <span>{state.mode === 'create' && state.parent ? '子文件夹目录名' : '目录名（相对库，斜线表示子文件夹）'}</span>
               <input
                 value={path}
                 onChange={(e) => {
                   setPathTouched(true);
                   setPath(sanitizeFolderPathInput(e.target.value));
                 }}
-                placeholder="例如：研究/材质 或 材质研究"
+                placeholder={state.mode === 'create' && state.parent ? '例如：材质' : '例如：研究/材质'}
               />
             </label>
-            <p className="folder-modal-hint">Windows 可用中文路径；不要用 .. 或绝对路径。</p>
+            <p className="folder-modal-hint">
+              {state.mode === 'create' && state.parent ? (
+                <>
+                  将建在 <code>{state.parent}</code> 下面。展开父文件夹就能看到。
+                </>
+              ) : (
+                'Windows 可用中文路径；不要用 .. 或绝对路径。'
+              )}
+            </p>
             <div className="folder-modal-foot">
               <button type="button" className="btn ghost" onClick={onClose}>
                 取消

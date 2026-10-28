@@ -7,11 +7,11 @@ import './card.css';
 const THEME_KEY = 'flyleaf-theme';
 
 function applyStoredTheme(): void {
-  let theme = 'dark';
+  let theme = 'light';
   try {
     const v = localStorage.getItem(THEME_KEY);
     if (v === 'light' || v === 'dark') theme = v;
-    else if (window.matchMedia?.('(prefers-color-scheme: light)').matches) theme = 'light';
+    else if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) theme = 'dark';
   } catch {
     /* ignore */
   }
@@ -32,7 +32,9 @@ function hostBridge(): WebViewHost | null {
   return chrome?.webview ?? null;
 }
 
-function postHost(message: 'drag' | 'resize' | 'show-main'): void {
+type CardEdge = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
+
+function postHost(message: 'drag' | 'show-main' | 'resize' | `resize-${CardEdge}`): void {
   hostBridge()?.postMessage(message);
 }
 
@@ -46,6 +48,16 @@ function Card(): React.ReactElement {
   const [status, setStatus] = useState('草稿随输随存');
   const timer = useRef<number | null>(null);
   const areaRef = useRef<HTMLTextAreaElement | null>(null);
+  const draftChain = useRef<Promise<void>>(Promise.resolve());
+
+  const enqueueDraft = (value: string): Promise<void> => {
+    const job = draftChain.current.catch(() => undefined).then(() => client.capture.saveDraft(value));
+    draftChain.current = job.then(
+      () => undefined,
+      () => undefined,
+    );
+    return job;
+  };
 
   useEffect(() => {
     void client.capture
@@ -64,13 +76,18 @@ function Card(): React.ReactElement {
     setText(value);
     if (timer.current) window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => {
-      void client.capture.saveDraft(value).then(() => setStatus(`已保存 ${nowTime()}`));
+      void enqueueDraft(value)
+        .then(() => setStatus(`已保存 ${nowTime()}`))
+        .catch(() => setStatus('草稿保存失败'));
     }, 300);
   };
 
   const archive = async (): Promise<void> => {
     if (!text.trim()) return;
+    if (timer.current) window.clearTimeout(timer.current);
+    timer.current = null;
     try {
+      await draftChain.current;
       const r = await client.capture.archive(text);
       setText('');
       setStatus(`已归档 → ${r.file} 第 ${r.line} 行`);
@@ -81,17 +98,23 @@ function Card(): React.ReactElement {
   };
 
   const hide = (): void => {
-    void client.capture.saveDraft(text).finally(() => window.close());
+    if (timer.current) window.clearTimeout(timer.current);
+    timer.current = null;
+    enqueueDraft(text);
+    void draftChain.current.finally(() => window.close());
   };
 
   const openScratch = async (): Promise<void> => {
     try {
+      if (timer.current) window.clearTimeout(timer.current);
+      timer.current = null;
+      enqueueDraft(text);
       setStatus('正在打开梳理画布…');
+      await draftChain.current;
       await client.framework.createScratch();
       postHost('show-main');
-      setStatus('已打开梳理画布');
-      // 主窗会收到 scratch:open；稍候藏随记卡
-      window.setTimeout(() => hide(), 200);
+      setStatus('已在主窗口打开梳理画布');
+      window.setTimeout(() => window.close(), 200);
     } catch (e) {
       setStatus(`打开失败：${String(e)}`);
     }
@@ -131,14 +154,24 @@ function Card(): React.ReactElement {
       />
       <div className="card-foot">
         <span className="card-status">{status}</span>
-        <button className="card-btn ghost" type="button" title="纯梳理，不同步笔记" onClick={() => void openScratch()}>
+        <button className="card-btn ghost" type="button" title="打开梳理画布（draw.io，不写笔记）" onClick={() => void openScratch()}>
           开梳理画布
         </button>
         <button className="card-btn" onClick={() => void archive()}>
           归档
         </button>
       </div>
-      <div className="card-resize" onMouseDown={() => postHost('resize')} />
+      {(['n', 's', 'e', 'w', 'nw', 'ne', 'sw', 'se'] as const).map((edge) => (
+        <div
+          key={edge}
+          className={`card-edge card-edge-${edge}`}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            postHost(edge === 'se' ? 'resize' : `resize-${edge}`);
+          }}
+        />
+      ))}
     </div>
   );
 }

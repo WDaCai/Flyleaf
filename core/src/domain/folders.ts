@@ -40,6 +40,9 @@ export const DEFAULT_FOLDER_SEED: readonly FolderEntry[] = [
 const ILLEGAL_SEG = /[<>:"\\|?*\u0000-\u001f]/;
 const RESERVED_WIN = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 
+/** 真实目录可以多层；界面至少要能挂父子两级，再深一点也不另起模型。 */
+export const MAX_FOLDER_DEPTH = 8;
+
 /** 规范化相对路径：posix、去 ..、去空段；非法则返回 null */
 export function normalizeFolderPath(raw: string): string | null {
   if (typeof raw !== 'string') return null;
@@ -55,8 +58,7 @@ export function normalizeFolderPath(raw: string): string | null {
     if (seg.endsWith('.') || seg.endsWith(' ')) return null;
     parts.push(seg);
   }
-  // 允许一层或两层
-  if (parts.length < 1 || parts.length > 2) return null;
+  if (parts.length < 1 || parts.length > MAX_FOLDER_DEPTH) return null;
   return parts.join('/');
 }
 
@@ -64,7 +66,7 @@ export function normalizeFolderPath(raw: string): string | null {
 export function validateFolderPath(raw: string): string | null {
   const n = normalizeFolderPath(raw);
   if (!n) {
-    return '目录名不合法：需相对路径（一层或两层），禁止 ..、绝对路径、隐藏目录与非法字符';
+    return `目录名不合法：需相对路径（最多 ${MAX_FOLDER_DEPTH} 层），禁止 ..、绝对路径、隐藏目录与非法字符`;
   }
   if (PROTECTED_FOLDER_PATHS.has(n.split('/')[0]!)) {
     return `不可使用系统目录：${n.split('/')[0]}`;
@@ -154,9 +156,54 @@ export function seedFromExisting(topDirs: string[]): FoldersConfig {
 
 
 
-/** 删除当前 inbox 时，挑选下一个收件箱（排除自身）；没有其他分类则 null */
+/** path 自己，或落在 ancestor 下面 */
+export function folderIsUnder(path: string, ancestor: string): boolean {
+  return path === ancestor || path.startsWith(`${ancestor}/`);
+}
+
+/** 重命名时改写自己和子路径前缀；无关路径原样返回 */
+export function retargetFolderPath(path: string, from: string, to: string): string {
+  if (path === from) return to;
+  if (from && path.startsWith(`${from}/`)) return `${to}${path.slice(from.length)}`;
+  return path;
+}
+
+/**
+ * 把清单里的 from 及其子文件夹改到 to。
+ * 不能把文件夹移进自己里面。改完的路径不能撞车。
+ */
+export function planFolderRename(
+  folders: FolderEntry[],
+  from: string,
+  to: string,
+  title?: string,
+): { ok: true; folders: FolderEntry[] } | { ok: false; reason: string } {
+  if (from !== to && folderIsUnder(to, from)) {
+    return { ok: false, reason: '不能把文件夹移到自己里面' };
+  }
+  const next = folders.map((f) => {
+    if (f.path === from) {
+      const nextTitle = title?.trim() || f.title || to.split('/').pop() || to;
+      return { path: to, title: nextTitle };
+    }
+    return { ...f, path: retargetFolderPath(f.path, from, to) };
+  });
+  const seen = new Set<string>();
+  for (const f of next) {
+    if (seen.has(f.path)) return { ok: false, reason: `目标文件夹已存在：${f.path}` };
+    seen.add(f.path);
+  }
+  return { ok: true, folders: next };
+}
+
+/** 删除文件夹时，清单里的子文件夹一并去掉，避免下次启动又建出来 */
+export function foldersAfterDelete(folders: FolderEntry[], path: string): FolderEntry[] {
+  return folders.filter((f) => !folderIsUnder(f.path, path));
+}
+
+/** 删除当前 inbox（或其父文件夹）时，挑选下一个收件箱；没有其他分类则 null */
 export function pickNextInbox(cfg: FoldersConfig, deletingPath: string): string | null {
-  const others = cfg.folders.filter((f) => f.path !== deletingPath);
+  const others = cfg.folders.filter((f) => !folderIsUnder(f.path, deletingPath));
   return others[0]?.path ?? null;
 }
 

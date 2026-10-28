@@ -15,7 +15,11 @@ import {
   normalizeFoldersConfig,
   seedFromExisting,
   canDeleteFolder,
+  folderIsUnder,
+  foldersAfterDelete,
   pickNextInbox,
+  planFolderRename,
+  retargetFolderPath,
   validateFolderPath,
 } from '../domain/folders';
 import { basename, dirname } from '../domain/paths';
@@ -61,6 +65,7 @@ export class VaultService {
       return node;
     };
 
+    await this.adoptDirs(dirs);
     for (const d of dirs) ensure(d);
 
     for (const f of files) {
@@ -157,23 +162,21 @@ export class VaultService {
     if (toErr) throw new BadRequestError(toErr);
     const from = normalizeFolderPath(input.from)!;
     const to = normalizeFolderPath(input.to)!;
-    const idx = cfg.folders.findIndex((f) => f.path === from);
-    if (idx < 0) throw new BadRequestError(`文件夹不在清单中：${from}`);
-    if (from !== to && cfg.folders.some((f) => f.path === to)) {
-      throw new BadRequestError(`目标文件夹已存在：${to}`);
-    }
+    if (!cfg.folders.some((f) => f.path === from)) throw new BadRequestError(`文件夹不在清单中：${from}`);
+    const planned = planFolderRename(cfg.folders, from, to, input.title);
+    if (!planned.ok) throw new BadRequestError(planned.reason);
     if (from !== to) {
       if (await this.repo.dirExists(to)) throw new BadRequestError(`磁盘上已有目录：${to}`);
       if (await this.repo.dirExists(from)) {
+        // 整棵目录一起搬走，磁盘上的子文件夹跟着走
         await this.repo.renameDir(from, to);
-      } else {
-        await this.repo.mkdir(to);
+      }
+      for (const f of planned.folders) {
+        if (folderIsUnder(f.path, to)) await this.repo.mkdir(f.path);
       }
     }
-    const title = input.title?.trim() || cfg.folders[idx]!.title || to.split('/').pop() || to;
-    cfg.folders[idx] = { path: to, title };
-    // 子路径若在清单里（两层），顺带改前缀——当前清单只存用户声明的项，按精确匹配即可
-    if (cfg.inbox === from) cfg.inbox = to;
+    cfg.folders = planned.folders;
+    cfg.inbox = retargetFolderPath(cfg.inbox, from, to);
     this.folders = cfg;
     await this.saveFoldersFile(cfg);
     this.emitChanged([from, to]);
@@ -190,9 +193,9 @@ export class VaultService {
     const exists = await this.repo.dirExists(p);
     const empty = exists ? await this.repo.isDirEmpty(p) : true;
 
-    // 删当前 inbox：有其他分类则自动迁收件箱；只剩这一个则拒绝并给短路径说明
+    // 删当前 inbox，或删掉包着 inbox 的父文件夹：有其他分类则自动迁收件箱
     let migratedInbox: string | null = null;
-    if (cfg.inbox === p) {
+    if (folderIsUnder(cfg.inbox, p)) {
       const next = pickNextInbox(cfg, p);
       if (!next) {
         throw new BadRequestError(
@@ -213,7 +216,7 @@ export class VaultService {
     if (exists) {
       await this.repo.rmdir(p, { recursive: mode === 'delete-recursive' || empty });
     }
-    cfg.folders = cfg.folders.filter((f) => f.path !== p);
+    cfg.folders = foldersAfterDelete(cfg.folders, p);
     this.folders = cfg;
     await this.saveFoldersFile(cfg);
     this.emitChanged(migratedInbox ? [p, migratedInbox] : [p]);
@@ -233,6 +236,21 @@ export class VaultService {
     await this.saveFoldersFile(cfg);
     this.emitChanged([p]);
     return this.snapshot();
+  }
+
+  /** 磁盘上已有、清单里还没有的目录补进清单，这样子文件夹能被重命名、删除和移动。 */
+  private async adoptDirs(dirs: string[]): Promise<void> {
+    const cfg = await this.listFolders();
+    let changed = false;
+    for (const d of dirs) {
+      if (validateFolderPath(d)) continue;
+      if (cfg.folders.some((f) => f.path === d)) continue;
+      cfg.folders.push({ path: d, title: basename(d) });
+      changed = true;
+    }
+    if (!changed) return;
+    this.folders = cfg;
+    await this.saveFoldersFile(cfg);
   }
 
   private snapshot(): FoldersConfig {
