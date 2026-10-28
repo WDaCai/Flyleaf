@@ -192,6 +192,11 @@
   --dur-fast: 140ms;
   --dur-mid: 240ms;
   --dur-slow: 360ms;
+  /* 涂鸦填充是壳层例外：要看见笔从一侧涂过去，不用 140ms 跳到一半。 */
+  --dur-doodle: 340ms;
+  --dur-doodle-press: 220ms;
+  --dur-doodle-side: 420ms;
+  --dur-doodle-on: 680ms;
 
   --row: 30px;
   --radius: 10px;
@@ -609,6 +614,10 @@ kbd {
     --dur-fast: 1ms;
     --dur-mid: 1ms;
     --dur-slow: 1ms;
+    --dur-doodle: 1ms;
+    --dur-doodle-press: 1ms;
+    --dur-doodle-side: 1ms;
+    --dur-doodle-on: 1ms;
     --ease-out: linear;
     --ease-soft: linear;
   }

@@ -1823,15 +1823,28 @@
 .side-item kbd {
   margin-left: auto;
 }
+.side-item,
+.tree-row,
+.scratch-row-main {
+  position: relative;
+  isolation: isolate;
+  background: transparent;
+}
+.side-item > *,
+.tree-row > *,
+.scratch-row-main > * {
+  position: relative;
+  z-index: 1;
+}
 .side-label,
 .tree-name,
-.scratch-row-title,
+.scratch-row-title {
+  opacity: 1;
+  mix-blend-mode: normal;
+}
 .empty-link {
   position: relative;
 }
-.side-label::after,
-.tree-name::after,
-.scratch-row-title::after,
 .empty-link::after {
   content: '';
   position: absolute;
@@ -1839,37 +1852,113 @@
   right: 0;
   bottom: -1px;
   height: 5px;
-  opacity: 0;
+  opacity: 0.85;
   pointer-events: none;
   background-color: var(--accent-ink);
   -webkit-mask: var(--doodle-wave) center / 100% 100% no-repeat;
   mask: var(--doodle-wave) center / 100% 100% no-repeat;
-  transition: opacity var(--dur-fast) var(--ease-soft);
 }
-.side-item:hover {
+.side-item:hover,
+.tree-row:hover,
+.scratch-row-main:hover {
   color: var(--heading);
   background: transparent;
 }
-.side-item:hover .side-label::after,
-.tree-row:hover .tree-name::after,
-.scratch-row-main:hover .scratch-row-title::after {
-  opacity: 0.9;
-}
-.side-item:active::before,
-.scratch-row-main:active::before,
-.empty-link:active::before {
+.side-item::before,
+.tree-row::before,
+.scratch-row-main::before {
   content: '';
   position: absolute;
-  inset: 1px 2px;
-  border: 1.5px solid var(--accent);
-  border-radius: 46% 54% 50% 50% / 58% 42% 60% 40%;
-  transform: rotate(-5deg);
+  inset: 0;
+  z-index: -1;
   pointer-events: none;
+  border-radius: inherit;
+  background:
+    repeating-linear-gradient(
+      -48deg,
+      transparent 0 3px,
+      color-mix(in srgb, var(--accent) 46%, transparent) 3px 6px
+    ),
+    color-mix(in srgb, var(--accent) 16%, transparent);
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path var(--dur-doodle-side) linear;
 }
+.side-item:hover::before,
+.tree-row:hover::before,
+.scratch-row-main:hover::before {
+  clip-path: inset(0 28% 0 0);
+}
+.side-item:active::before,
+.tree-row:active::before,
+.scratch-row-main:active::before {
+  clip-path: inset(0 0 0 0);
+  transition-duration: var(--dur-doodle-press);
+  background:
+    repeating-linear-gradient(
+      -48deg,
+      transparent 0 3px,
+      color-mix(in srgb, var(--accent) 62%, transparent) 3px 6px
+    ),
+    color-mix(in srgb, var(--accent) 34%, transparent);
+}
+.tree-row.on::before,
+.tree-row.file.on::before,
+.tree-row.dir.on::before,
+.scratch-row-main.on::before,
+.side-item.on::before {
+  clip-path: inset(0 34% 0 0);
+  transition-duration: var(--dur-doodle-on);
+  background:
+    repeating-linear-gradient(
+      -48deg,
+      transparent 0 3px,
+      color-mix(in srgb, var(--accent) 28%, transparent) 3px 6px
+    ),
+    color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.tree-row.on:hover::before,
+.tree-row.file.on:hover::before,
+.tree-row.dir.on:hover::before,
+.scratch-row-main.on:hover::before,
+.side-item.on:hover::before {
+  clip-path: inset(0 22% 0 0);
+}
+.tree-row.on:active::before,
+.tree-row.file.on:active::before,
+.tree-row.dir.on:active::before,
+.scratch-row-main.on:active::before,
+.side-item.on:active::before {
+  clip-path: inset(0 0 0 0);
+  transition-duration: var(--dur-doodle-press);
+}
+.tree-row,
+.tree-row:hover,
+.tree-row:active,
+.tree-row.on,
+.tree-row.file.on,
+.tree-row.dir.on,
+.tree-row.on:hover,
+.tree-row.file.on:hover,
+.tree-row.dir.on:hover,
+.tree-row.on:active,
+.tree-row.file.on:active,
+.tree-row.dir.on:active,
+.scratch-row-main,
+.scratch-row-main:hover,
+.scratch-row-main.on,
+.scratch-row-main.on:hover {
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+.tree-row.on,
+.tree-row.file.on,
+.tree-row.dir.on,
+.tree-row.on .tree-name,
+.scratch-row-main.on,
 .side-item.on {
   color: var(--heading);
   font-weight: 600;
-  box-shadow: inset 2px 0 0 var(--accent-secondary);
 }
 .side-item:focus-visible,
 .btn.doodle:focus-visible,
@@ -1984,6 +2073,7 @@
 .btn.doodle {
   position: relative;
   z-index: 0;
+  isolation: isolate;
   overflow: hidden;
   height: 42px;
   padding: 0 28px;
@@ -2004,19 +2094,18 @@
 .btn.doodle::before {
   content: '';
   position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 54%;
-  background: repeating-linear-gradient(
-    -52deg,
-    transparent 0 3px,
-    color-mix(in srgb, var(--accent) 80%, transparent) 3px 5.5px
-  );
-  opacity: 0;
-  transition: opacity var(--dur-fast) var(--ease-soft);
-  pointer-events: none;
+  inset: 0;
   z-index: -1;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      -50deg,
+      transparent 0 3px,
+      color-mix(in srgb, var(--accent) 78%, transparent) 3px 6px
+    ),
+    color-mix(in srgb, var(--accent) 55%, var(--elevated));
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path var(--dur-doodle) linear;
 }
 .btn.doodle:hover {
   border-color: var(--doodle-ink);
@@ -2024,32 +2113,54 @@
   color: var(--doodle-ink);
 }
 .btn.doodle:hover::before {
-  opacity: 1;
+  clip-path: inset(0 38% 0 0);
 }
 .btn.doodle:active {
-  background: var(--accent);
+  background: var(--elevated);
   border-color: var(--doodle-ink);
-  color: var(--on-accent);
+  color: var(--doodle-ink);
   transform: none;
 }
 .btn.doodle:active::before {
-  opacity: 0;
+  clip-path: inset(0 0 0 0);
+  transition-duration: var(--dur-doodle-press);
+  background:
+    repeating-linear-gradient(
+      -50deg,
+      transparent 0 2px,
+      color-mix(in srgb, var(--accent) 88%, transparent) 2px 5px
+    ),
+    var(--accent);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .side-label::after,
-  .tree-name::after,
-  .scratch-row-title::after,
   .empty-link::after,
-  .side-item:active::before,
-  .scratch-row-main:active::before,
-  .empty-link:active::before,
-  .btn.doodle::before {
+  .btn.doodle::before,
+  .side-item::before,
+  .tree-row::before,
+  .scratch-row-main::before {
     display: none !important;
   }
   .side-item:hover,
-  .side-item:active {
-    background: var(--hover-soft);
+  .tree-row:hover,
+  .scratch-row-main:hover {
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  .side-item:active,
+  .tree-row:active,
+  .scratch-row-main:active {
+    background: color-mix(in srgb, var(--accent) 32%, transparent);
+  }
+  .side-item.on,
+  .tree-row.on,
+  .tree-row.file.on,
+  .tree-row.dir.on,
+  .tree-row.on:hover,
+  .tree-row.file.on:hover,
+  .tree-row.dir.on:hover,
+  .scratch-row-main.on {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    box-shadow: none;
   }
   .btn.doodle:hover {
     background: color-mix(in srgb, var(--accent) 42%, var(--elevated));
