@@ -1336,6 +1336,8 @@
   background: var(--hover-soft);
 }
 .tree-empty {
+  border-color: transparent;
+  background: transparent;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1772,10 +1774,14 @@
 .sidebar-head .theme-toggle {
   grid-column: 3;
   grid-row: 2;
+  white-space: nowrap;
+  min-width: max-content;
 }
 .sidebar-head .icon-btn:last-child {
   grid-column: 4;
   grid-row: 2;
+  white-space: nowrap;
+  min-width: max-content;
 }
 .scratch-row-main {
   position: relative;
@@ -1929,21 +1935,24 @@
 }
 .empty-watermark {
   position: absolute;
-  width: min(460px, 78%);
+  width: min(520px, 86%);
   aspect-ratio: 1;
   left: 50%;
-  top: 46%;
+  top: 48%;
   transform: translate(-50%, -50%);
   background: url('/favicon.png') center / contain no-repeat;
   pointer-events: none;
   z-index: 0;
+  -webkit-mask-image: radial-gradient(circle, #000 18%, transparent 62%);
+  mask-image: radial-gradient(circle, #000 18%, transparent 62%);
 }
 [data-theme='light'] .empty-watermark {
-  opacity: 0.72;
+  opacity: 0.55;
   mix-blend-mode: multiply;
 }
 [data-theme='dark'] .empty-watermark {
-  opacity: 0.12;
+  opacity: 0.2;
+  mix-blend-mode: soft-light;
 }
 .empty-plain > :not(.empty-watermark) {
   position: relative;
@@ -1978,7 +1987,7 @@
   overflow: hidden;
   height: 42px;
   padding: 0 28px;
-  border: 1.75px solid var(--doodle-ink);
+  border: 2px solid var(--doodle-ink);
   border-radius: 16px 20px 15px 18px / 18px 15px 20px 16px;
   background: var(--elevated);
   color: var(--doodle-ink);

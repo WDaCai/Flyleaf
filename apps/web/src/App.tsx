@@ -1287,7 +1287,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
         <div className="sidebar-head">
           <img className="brand-mark" src="/favicon.png" alt="" width={36} height={36} />
           <span className="brand">Flyleaf</span>
-          <span className="vault-name">{vault?.name ?? '—'}</span>
+          <span className="vault-name" title={vault?.name ?? ''}>{vault?.name ?? '—'}</span>
           <button
             className="icon-btn theme-toggle"
             title={theme === 'dark' ? '切换到浅色 · 温暖可读' : '切换到深色 · 冷静聚焦'}
