@@ -211,8 +211,12 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
   const [scratchOpen, setScratchOpen] = useState<{ path: string; title: string } | null>(null);
   const [folders, setFolders] = useState<FoldersConfig | null>(null);
   const [folderDialog, setFolderDialog] = useState<
-    null | { mode: 'create' } | { mode: 'rename'; path: string; title: string } | { mode: 'manage' }
+    | null
+    | { mode: 'create'; parent?: string }
+    | { mode: 'rename'; path: string; title: string }
+    | { mode: 'manage' }
   >(null);
+  const [revealDir, setRevealDir] = useState<string | null>(null);
   const [dirMenu, setDirMenu] = useState<{ path: string; x: number; y: number } | null>(null);
   const [fileMenu, setFileMenu] = useState<{ path: string; x: number; y: number } | null>(null);
   const [theme, setTheme] = useState<UiTheme>(() => {
@@ -273,6 +277,11 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
     try {
       const next = await client.vault.tree();
       setTree(next);
+      try {
+        setFolders(await client.vault.listFolders());
+      } catch {
+        /* 树已更新；清单失败时保留上一次 */
+      }
       try {
         const hits = await client.search.query({ type: 'framework', limit: 40 });
         setFrameworkHits(hits);
@@ -431,18 +440,23 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
   );
 
   const createFolder = useCallback(
-    async (title: string, pathInput: string): Promise<void> => {
-      const path = sanitizeFolderPathInput(pathInput || title);
+    async (title: string, pathInput: string, parent?: string): Promise<void> => {
+      let path = sanitizeFolderPathInput(pathInput || title);
+      if (parent) {
+        const seg = path.split('/').filter(Boolean).pop() ?? '';
+        path = seg ? `${parent}/${seg}` : '';
+      }
       if (!path) {
         setStatus('请填写目录名');
         return;
       }
       try {
-        const next = await client.vault.createFolder({ path, title: title.trim() || path });
+        const next = await client.vault.createFolder({ path, title: title.trim() || path.split('/').pop() || path });
         setFolders(next);
+        setRevealDir(path);
         await refreshTree();
         setFolderDialog(null);
-        setStatus(`已建文件夹 ${path}`);
+        setStatus(parent ? `已在「${parent}」下建子文件夹 ${path}` : `已建文件夹 ${path}`);
       } catch (e) {
         const err = e as { message?: string };
         setStatus(`新建文件夹失败：${err.message ?? '未知错误'}`);
@@ -475,7 +489,9 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
   const deleteFolder = useCallback(
     async (path: string): Promise<void> => {
       const ok = window.confirm(`删除文件夹「${path}」？
-空目录可删；有内容则拒绝（不会清笔记）。
+空目录可删。里面若有子文件夹或笔记，会先拒绝。
+确认后才会整夹删除（笔记不进回收站）。
+单篇笔记仍请用文件上的「删除（进回收站）」。
 若正用作收件箱且还有其他分类，会自动把收件箱迁过去。`);
       if (!ok) return;
       try {
@@ -489,7 +505,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
         if (msg.includes('非空')) {
           const force = window.confirm(`${msg}
 
-确定要连同里面的笔记一起删除吗？此操作不可恢复。`);
+确定连同里面的子文件夹和笔记一起删除吗？这些笔记不进回收站，且不可恢复。`);
           if (!force) {
             setStatus('已取消删除');
             return;
@@ -1366,8 +1382,10 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
             nodes={tree}
             activePath={active}
             inboxPath={folders?.inbox ?? null}
+            revealPath={revealDir}
             onOpen={(p) => void openPath(p)}
             onCreateIn={(dir) => void createNote('note', dir)}
+            onCreateSubfolder={(dir) => setFolderDialog({ mode: 'create', parent: dir })}
             onDirMenu={(path, x, y) => {
               setFileMenu(null);
               setDirMenu({ path, x, y });
@@ -1767,12 +1785,20 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
 
       {folderDialog && (
         <FolderDialog
-          key={folderDialog.mode === 'rename' ? `rename:${folderDialog.path}` : folderDialog.mode}
+          key={
+            folderDialog.mode === 'rename'
+              ? `rename:${folderDialog.path}`
+              : folderDialog.mode === 'create'
+                ? `create:${folderDialog.parent ?? ''}`
+                : 'manage'
+          }
           state={folderDialog}
           folders={folders}
           inbox={folders?.inbox ?? '00-inbox'}
           onClose={() => setFolderDialog(null)}
-          onCreate={(title, path) => void createFolder(title, path)}
+          onCreate={(title, path) =>
+            void createFolder(title, path, folderDialog.mode === 'create' ? folderDialog.parent : undefined)
+          }
           onRename={(from, to, title) => void renameFolder(from, to, title)}
           onDelete={(path) => void deleteFolder(path)}
           onSetInbox={(path) => void setInboxFolder(path)}
@@ -1788,6 +1814,16 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
             style={{ left: dirMenu.x, top: dirMenu.y }}
             onClick={(e) => e.stopPropagation()}
           >
+            <button
+              type="button"
+              onClick={() => {
+                const parent = dirMenu.path;
+                setDirMenu(null);
+                setFolderDialog({ mode: 'create', parent });
+              }}
+            >
+              新建子文件夹
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -1862,7 +1898,7 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
             </button>
             <div className="dir-menu-sep" />
             <div className="dir-menu-label">移动到</div>
-            {(folders?.folders ?? []).map((f) => (
+            {flattenDirs(tree).map((f) => (
               <button
                 key={f.path}
                 type="button"
@@ -1872,7 +1908,8 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
                   void moveNote(p, f.path);
                 }}
               >
-                {f.title}
+                {'　'.repeat(f.depth)}
+                {f.name}
                 {folders?.inbox === f.path ? ' · 收件箱' : ''}
               </button>
             ))}
@@ -1884,20 +1921,34 @@ export function App({ client }: { client: FlyleafClient }): React.ReactElement {
 }
 
 
+function flattenDirs(nodes: FileNode[], depth = 0): Array<{ path: string; name: string; depth: number }> {
+  const out: Array<{ path: string; name: string; depth: number }> = [];
+  for (const n of nodes) {
+    if (n.kind !== 'dir') continue;
+    out.push({ path: n.path, name: n.name, depth });
+    if (n.children?.length) out.push(...flattenDirs(n.children, depth + 1));
+  }
+  return out;
+}
+
 function TreeView({
   nodes,
   activePath,
   inboxPath,
+  revealPath,
   onOpen,
   onCreateIn,
+  onCreateSubfolder,
   onDirMenu,
   onFileMenu,
 }: {
   nodes: FileNode[];
   activePath: string | null;
   inboxPath?: string | null;
+  revealPath?: string | null;
   onOpen: (path: string) => void;
   onCreateIn?: (dir: string) => void;
+  onCreateSubfolder?: (dir: string) => void;
   onDirMenu?: (path: string, x: number, y: number) => void;
   onFileMenu?: (path: string, x: number, y: number) => void;
 }): React.ReactElement {
@@ -1919,6 +1970,16 @@ function TreeView({
       return changed ? next : prev;
     });
   }, [nodes]);
+
+  useEffect(() => {
+    if (!revealPath) return;
+    const parts = revealPath.split('/').filter(Boolean);
+    setOpen((prev) => {
+      const next = new Set(prev);
+      for (let i = 1; i <= parts.length; i += 1) next.add(parts.slice(0, i).join('/'));
+      return next;
+    });
+  }, [revealPath]);
 
   const toggle = (p: string): void => {
     userTouched.current.add(p);
@@ -1956,16 +2017,28 @@ function TreeView({
             {expanded && empty && (
               <div className="tree-empty" style={{ paddingLeft: (depth + 1) * 14 + 20 }}>
                 <span className="tree-empty-copy">此文件夹是空的</span>
-                <button
-                  type="button"
-                  className="btn ghost tree-empty-cta"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onCreateIn?.(n.path);
-                  }}
-                >
-                  在此新建
-                </button>
+                <span className="tree-empty-actions">
+                  <button
+                    type="button"
+                    className="btn ghost tree-empty-cta"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCreateSubfolder?.(n.path);
+                    }}
+                  >
+                    子文件夹
+                  </button>
+                  <button
+                    type="button"
+                    className="btn ghost tree-empty-cta"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCreateIn?.(n.path);
+                    }}
+                  >
+                    在此新建
+                  </button>
+                </span>
               </div>
             )}
             {expanded && !empty && render(kids, depth + 1)}
@@ -2012,7 +2085,7 @@ function FolderDialog({
   onOpenCreate,
   onOpenRename,
 }: {
-  state: { mode: 'create' } | { mode: 'rename'; path: string; title: string } | { mode: 'manage' };
+  state: { mode: 'create'; parent?: string } | { mode: 'rename'; path: string; title: string } | { mode: 'manage' };
   folders: FoldersConfig | null;
   inbox: string;
   onClose: () => void;
@@ -2049,8 +2122,10 @@ function FolderDialog({
               随记收件箱：<code>{inbox}</code>。也可在侧栏文件夹上右键操作。
             </p>
             <ul className="folder-list">
-              {(folders?.folders ?? []).map((f) => (
-                <li key={f.path}>
+              {[...(folders?.folders ?? [])]
+                .sort((a, b) => a.path.localeCompare(b.path, 'zh-Hans-CN'))
+                .map((f) => (
+                <li key={f.path} style={{ paddingLeft: (f.path.split('/').length - 1) * 14 }}>
                   <div className="folder-list-main">
                     <span className="folder-list-title">{f.title}</span>
                     <code>{f.path}</code>
@@ -2082,7 +2157,9 @@ function FolderDialog({
         ) : (
           <>
             <div className="folder-modal-head">
-              <strong>{state.mode === 'create' ? '新建文件夹' : '重命名文件夹'}</strong>
+              <strong>
+                {state.mode === 'rename' ? '重命名文件夹' : state.parent ? '新建子文件夹' : '新建文件夹'}
+              </strong>
               <button type="button" className="icon-btn" onClick={onClose}>
                 关闭
               </button>
@@ -2097,17 +2174,25 @@ function FolderDialog({
               />
             </label>
             <label className="folder-field">
-              <span>目录名（相对库，一层或两层）</span>
+              <span>{state.mode === 'create' && state.parent ? '子文件夹目录名' : '目录名（相对库，斜线表示子文件夹）'}</span>
               <input
                 value={path}
                 onChange={(e) => {
                   setPathTouched(true);
                   setPath(sanitizeFolderPathInput(e.target.value));
                 }}
-                placeholder="例如：研究/材质 或 材质研究"
+                placeholder={state.mode === 'create' && state.parent ? '例如：材质' : '例如：研究/材质'}
               />
             </label>
-            <p className="folder-modal-hint">Windows 可用中文路径；不要用 .. 或绝对路径。</p>
+            <p className="folder-modal-hint">
+              {state.mode === 'create' && state.parent ? (
+                <>
+                  将建在 <code>{state.parent}</code> 下面。展开父文件夹就能看到。
+                </>
+              ) : (
+                'Windows 可用中文路径；不要用 .. 或绝对路径。'
+              )}
+            </p>
             <div className="folder-modal-foot">
               <button type="button" className="btn ghost" onClick={onClose}>
                 取消

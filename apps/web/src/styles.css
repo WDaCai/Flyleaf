@@ -1351,6 +1351,11 @@
 .tree-empty-copy {
   color: var(--text-dim);
 }
+.tree-empty-actions {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
 .tree-empty-cta {
   padding: 2px 8px !important;
   font-size: 12px !important;
